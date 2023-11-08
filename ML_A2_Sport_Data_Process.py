@@ -17,7 +17,7 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-
+from torch.optim import SGD
 
 # 数据加载  ./Jumping_Jack_x10/Accelerometer
 motions = ['./Jumping_Jack_x10', './Lunges_x10', './Squat_x10']
@@ -401,3 +401,72 @@ print(classification_report(y_test, rf_predictions))
 
 print("\nSVM Classifier Report:")
 #print(classification_report(y_test, svm_predictions))
+
+
+
+
+
+#-----------------------------------------
+
+
+
+
+
+# 定义一个简单的线性分类器模型
+class LinearSVM(nn.Module):
+    def __init__(self):
+        super(LinearSVM, self).__init__()
+        # 这里的10是输入特征的数量，3是类别的数量
+        self.linear = nn.Linear(36, 3)
+
+    def forward(self, x):
+        return self.linear(x)
+
+
+# 确定多分类Hinge损失
+class MultiClassHingeLoss(nn.Module):
+    def __init__(self):
+        super(MultiClassHingeLoss, self).__init__()
+
+    def forward(self, output, target):
+        """
+        output (batch_size, n_classes): 模型输出
+        target (batch_size): 实际类别的索引
+        """
+        # 确定每个样本的正确分类的得分
+        correct_class_scores = output[torch.arange(0, output.size(0)).long(), target].view(-1, 1)
+
+        # 比较正确分类得分与其他分类得分的差距，并计算损失
+        margin = 1.0
+        loss = output - correct_class_scores + margin
+        # 确保正确的分类不参与损失计算
+        loss[torch.arange(0, output.size(0)).long(), target] = 0
+        # 只取正的部分，相当于max(0, .)
+        loss = torch.sum(torch.clamp(loss, min=0))
+        return loss
+
+
+# 初始化模型、损失函数和优化器
+model = LinearSVM()
+criterion = MultiClassHingeLoss()
+optimizer = SGD(model.parameters(), lr=0.01)
+
+
+
+# 训练模型
+for epoch in range(20):  # 训练20个epoch
+    optimizer.zero_grad()  # 清除之前的梯度
+    output = model(X_train)  # 前向传播
+    loss = criterion(output, y_train)  # 计算损失
+    loss.backward()  # 反向传播
+    optimizer.step()  # 更新权重
+
+    print(f'Epoch {epoch + 1}, Loss: {loss.item()}')
+
+# 模型评估
+with torch.no_grad():
+    output = model(X_test)
+    _, predicted = torch.max(output, 1)
+    correct = (predicted == y_test).sum().item()
+    print(f'Accuracy: {correct / len(y) * 100}%')
+
