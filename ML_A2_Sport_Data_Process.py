@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.impute import SimpleImputer
@@ -9,6 +9,14 @@ from scipy.stats import skew, kurtosis
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, classification_report
+from sklearn.utils.validation import column_or_1d
+
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 
 
 # 数据加载  ./Jumping_Jack_x10/Accelerometer
@@ -181,29 +189,37 @@ feature_numeric_scaled = scaler.fit_transform(feature_numeric_imputed)
 # 对类别特征进行处理（目标分类）
 # 提取类别特征
 feature_categorical = feature_df[['motion']]
+label_encoder = LabelEncoder()
 
-# 使用OneHotEncoder进行类别特征的独热编码
-encoder = OneHotEncoder(sparse_output=False)
-feature_categorical_encoded = encoder.fit_transform(feature_categorical)
-
+y = label_encoder.fit_transform(feature_categorical)
+y = column_or_1d(y, warn=True)
+print("categorical:======>")
+print(y)
 # 最后，合并数值特征和编码后的类别特征
-encoded_features = np.concatenate([feature_numeric_scaled, feature_categorical_encoded], axis=1)
+#encoded_features = np.concatenate([feature_numeric_scaled, y], axis=1)
 
-print("现在数据长这样，好丑：")
-print(encoded_features[:3])
+#print("现在数据长这样，好丑：")
+#print(encoded_features[:3])
 
-
-# print(encoded_features.to_csv('encoded_features.csv', sep='\t', index=False, encoding='utf-8'))sparse
+#encoded_features.to_csv('encoded_features.csv', sep='\t', index=False, encoding='utf-8').sparse()
 
 print("====================十八般武艺的特征处理 Done")
 
 
-y = feature_df['motion'].values  # 提取目标变量
+#y = feature_categorical_encoded  # 提取目标变量
 
 # 分割数据集
-X_train, X_test, y_train, y_test = train_test_split(encoded_features, y, test_size=0.2, random_state=42)
-print("切割后的数据：X_train")
-print(X_train[:3])
+X_train_data, X_test_data, y_train_data, y_test_data = train_test_split(feature_numeric_scaled, y, test_size=0.2, random_state=42)
+
+X_train = torch.tensor(X_train_data, dtype=torch.float32)
+X_test = torch.tensor(X_test_data, dtype=torch.float32)
+
+y_train = torch.tensor(y_train_data, dtype=torch.long)
+y_test = torch.tensor(y_test_data, dtype=torch.long)
+
+
+#print("切割后的数据：X_train")
+#print(X_train[:3])
 
 '''
 
@@ -216,6 +232,7 @@ print(X_train[:3])
 '''
 # 训练随机森林模型
 
+'''
 # 调整随机森林模型的参数 解决过拟合问题
 rf_classifier = RandomForestClassifier(
     n_estimators=100,
@@ -239,37 +256,133 @@ svm_classifier.fit(X_train, y_train)
 # 预测测试集
 rf_predictions = rf_classifier.predict(X_test)
 svm_predictions = svm_classifier.predict(X_test)
+'''
+
+
+# Define a DecisionTree
+class DecisionTree(nn.Module):
+    def __init__(self, max_depth):
+        super(DecisionTree, self).__init__()
+        self.max_depth = max_depth
+        self.tree = None
+
+    def fit(self, X, y, depth=0):
+        if depth >= self.max_depth:
+            return {"class": torch.bincount(y).argmax()}
+        
+        if len(torch.unique(y)) == 1:
+            return {"class": y[0]}
+
+        num_samples, num_features = X.shape
+        best_gini = 1.0
+        best_split = None
+        left_X, right_X, left_y, right_y = None, None, None, None
+
+        for feature_index in range(num_features):
+            feature_values = X[:, feature_index]
+            unique_values = torch.unique(feature_values)
+            for value in unique_values:
+                split_mask = feature_values <= value
+                left, right = y[split_mask], y[~split_mask]
+                gini = (len(left) / num_samples) * self.gini_impurity(left) + (len(right) / num_samples) * self.gini_impurity(right)
+                if gini < best_gini:
+                    best_gini = gini
+                    best_split = (feature_index, value)
+                    left_X, right_X, left_y, right_y = X[split_mask], X[~split_mask], y[split_mask], y[~split_mask]
+
+        if best_gini == 1.0:
+            return {"class": torch.bincount(y).argmax()}
+
+        self.tree = {
+            "feature_index": best_split[0],
+            "split_value": best_split[1],
+            "left": self.fit(left_X, left_y, depth + 1),
+            "right": self.fit(right_X, right_y, depth + 1)
+        }
+        return self.tree
+
+    def gini_impurity(self, y):
+        if len(y) == 0:
+            return 0
+        p = torch.bincount(y) / len(y)
+        return 1 - torch.sum(p ** 2)
+
+    def predict(self, X):
+        if self.tree is None:
+            raise Exception("The tree is not trained yet.")
+        return torch.tensor([self._predict(x, self.tree) for x in X])
+
+    def _predict(self, x, node):
+        if "split_value" not in node:
+            return node["class"]  # 叶子节点返回类别标签或回归值
+        if x[node["feature_index"]] <= node["split_value"]:
+            return self._predict(x, node["left"])
+        else:
+            return self._predict(x, node["right"])
+
+# Create a RandomForeset with multiple tress.
+class RandomForestClassifier:
+    def __init__(self, num_trees, max_depth):
+        self.num_trees = num_trees
+        self.max_depth = max_depth
+        self.trees = [DecisionTree(max_depth) for _ in range(num_trees)]
+    
+    def fit(self, X, y):
+        for tree in self.trees:
+            tree.fit(X, y)
+    
+    def predict(self, X):
+        predictions = [tree.predict(X) for tree in self.trees]
+        return torch.stack(predictions, dim=0).mode(0).values
+
+# 创建并训练随机森林分类器
+num_trees = 8
+max_depth = 5
+print("Create RandomForestClassifer===========")
+random_forest = RandomForestClassifier(num_trees, max_depth)
+print("Fit RandomForestClassifer===========")
+random_forest.fit(X_train, y_train)
+
+# 预测
+print("RandomForestClassifer predicts()===========")
+rf_predictions = random_forest.predict(X_test)
+
+# 计算准确率
+accuracy = accuracy_score(y_test, rf_predictions)
+print("Accuracy:", accuracy)
+
+
 
 # 评估模型性能
 print("Random Forest Classifier:")
 print("Accuracy:", accuracy_score(y_test, rf_predictions))
 
 print("\nSVM Classifier:")
-print("Accuracy:", accuracy_score(y_test, svm_predictions))
+#print("Accuracy:", accuracy_score(y_test, svm_predictions))
 
 
 # 定义交叉验证策略
 skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
 # 对于随机森林和SVM，使用交叉验证计算准确度
-rf_cv_accuracy = cross_val_score(rf_classifier, encoded_features, y, cv=skf, scoring='accuracy')
-svm_cv_accuracy = cross_val_score(svm_classifier, encoded_features, y, cv=skf, scoring='accuracy')
+#rf_cv_accuracy = cross_val_score(rf_classifier, encoded_features, y, cv=skf, scoring='accuracy')
+#svm_cv_accuracy = cross_val_score(svm_classifier, encoded_features, y, cv=skf, scoring='accuracy')
 
-print(f"Random Forest CV Accuracy: {rf_cv_accuracy.mean()} (+/- {rf_cv_accuracy.std() * 2})")
-print(f"SVM CV Accuracy: {svm_cv_accuracy.mean()} (+/- {svm_cv_accuracy.std() * 2})")
+#print(f"Random Forest CV Accuracy: {rf_cv_accuracy.mean()} (+/- {rf_cv_accuracy.std() * 2})")
+#print(f"SVM CV Accuracy: {svm_cv_accuracy.mean()} (+/- {svm_cv_accuracy.std() * 2})")
 
 # 混淆矩阵
 rf_confusion_matrix = confusion_matrix(y_test, rf_predictions)
-svm_confusion_matrix = confusion_matrix(y_test, svm_predictions)
+#svm_confusion_matrix = confusion_matrix(y_test, svm_predictions)
 
 # 精确度、召回率和F1分数
 rf_precision = precision_score(y_test, rf_predictions, average='weighted')
 rf_recall = recall_score(y_test, rf_predictions, average='weighted')
 rf_f1 = f1_score(y_test, rf_predictions, average='weighted')
 
-svm_precision = precision_score(y_test, svm_predictions, average='weighted')
-svm_recall = recall_score(y_test, svm_predictions, average='weighted')
-svm_f1 = f1_score(y_test, svm_predictions, average='weighted')
+#svm_precision = precision_score(y_test, svm_predictions, average='weighted')
+#svm_recall = recall_score(y_test, svm_predictions, average='weighted')
+#svm_f1 = f1_score(y_test, svm_predictions, average='weighted')
 
 # 打印评估指标
 print(f"Random Forest Confusion Matrix:\n{rf_confusion_matrix}")
@@ -277,14 +390,14 @@ print(f"Random Forest Precision: {rf_precision}")
 print(f"Random Forest Recall: {rf_recall}")
 print(f"Random Forest F1 Score: {rf_f1}")
 
-print(f"SVM Confusion Matrix:\n{svm_confusion_matrix}")
-print(f"SVM Precision: {svm_precision}")
-print(f"SVM Recall: {svm_recall}")
-print(f"SVM F1 Score: {svm_f1}")
+#print(f"SVM Confusion Matrix:\n{svm_confusion_matrix}")
+#print(f"SVM Precision: {svm_precision}")
+#print(f"SVM Recall: {svm_recall}")
+#print(f"SVM F1 Score: {svm_f1}")
 
 # 分类报告
 print("Random Forest Classifier Report:")
 print(classification_report(y_test, rf_predictions))
 
 print("\nSVM Classifier Report:")
-print(classification_report(y_test, svm_predictions))
+#print(classification_report(y_test, svm_predictions))
