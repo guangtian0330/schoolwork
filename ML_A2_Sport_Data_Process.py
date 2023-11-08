@@ -1,83 +1,87 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.svm import SVC
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.impute import SimpleImputer
 from scipy.stats import skew, kurtosis
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, classification_report
 from sklearn.utils.validation import column_or_1d
-
+from sklearn.metrics import accuracy_score
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+
 
 
 # 数据加载  ./Jumping_Jack_x10/Accelerometer
 motions = ['./Jumping_Jack_x10', './Lunges_x10', './Squat_x10']
 sensors = ['/Accelerometer', '/Orientation', '/TotalAcceleration']
+sensor_features = {sensors[0]: ['x', 'y', 'z'],
+                   sensors[1]: ['roll', 'pitch', 'yaw'],
+                   sensors[2]: ['x', 'y', 'z']}
 # sensors = ['/TotalAcceleration']
 dataframes = {}
 
-for motion in motions:
-    for sensor in sensors:
-        filename = f"{motion}{sensor}.csv"
-        df_key = f"{motion}{sensor}"
-        dataframes[df_key] = pd.read_csv(filename)
+# 滑动窗口划分和特征提取
+window_size = 100  # 定义窗口大小
+step_size = 50    # 定义步长
 
-print("====================数据加载 Done")
-
-
-# 数据清洗
-for df_key, df in dataframes.items():
-    # 计算原始 NaN 值的数量
-    original_nan_count = df.isna().sum().sum()
-
-    # 去重复
-    df.drop_duplicates(inplace=True)
-    # 替换无穷大值为NaN
-    df.replace([np.inf, -np.inf], np.nan, inplace=True)
-    # 前向填充处理一部分 NaN 值
-    df.ffill(inplace=True)
-
-    # 计算前向填充后 NaN 值的数量
-    nan_count_after_ffill = df.isna().sum().sum()
-
-    # 创建一个 imputer 对象，用列的均值填充剩余的 NaN 值
-    imputer = SimpleImputer(missing_values=np.nan, strategy='mean')
-
-    # 应用 imputer 到每个 dataframe
-    df_filled = pd.DataFrame(imputer.fit_transform(df), columns=df.columns)
-
-    # 计算填充均值后 NaN 值的数量
-    nan_count_after_imputing = df_filled.isna().sum().sum()
-
-    # 打印信息
-    print(f"{df_key}:")
-    print(f"Original NaN count: {original_nan_count}")
-    print(f"NaN count after forward fill: {nan_count_after_ffill}")
-    print(f"NaN filled with forward fill: {original_nan_count - nan_count_after_ffill}")
-    print(f"NaN count after mean imputation: {nan_count_after_imputing}")
-    print(f"NaN filled with mean imputation: {nan_count_after_ffill - nan_count_after_imputing}")
-
-    # 更新字典中的DataFrame
-    dataframes[df_key] = df_filled
+def load_data_from_files() :
+    for motion in motions:
+        for sensor in sensors:
+            filename = f"{motion}{sensor}.csv"
+            df_key = f"{motion}{sensor}"
+            dataframes[df_key] = pd.read_csv(filename)
+    print("====================数据加载 Done")
 
 
-print("====================数据清洗 Done")
+def data_preprocess():
+    # 数据清洗
+    for df_key, df in dataframes.items():
+        # 计算原始 NaN 值的数量
+        original_nan_count = df.isna().sum().sum()
+    
+        # 去重复
+        df.drop_duplicates(inplace=True)
+        # 替换无穷大值为NaN
+        df.replace([np.inf, -np.inf], np.nan, inplace=True)
+        # 前向填充处理一部分 NaN 值
+        df.ffill(inplace=True)
+    
+        # 计算前向填充后 NaN 值的数量
+        nan_count_after_ffill = df.isna().sum().sum()
+    
+        # 创建一个 imputer 对象，用列的均值填充剩余的 NaN 值
+        imputer = SimpleImputer(missing_values=np.nan, strategy='mean')
+    
+        # 应用 imputer 到每个 dataframe
+        df_filled = pd.DataFrame(imputer.fit_transform(df), columns=df.columns)
+    
+        # 计算填充均值后 NaN 值的数量
+        nan_count_after_imputing = df_filled.isna().sum().sum()
+    
+        # 打印信息
+        '''        
+        print(f"{df_key}:")
+        print(f"Original NaN count: {original_nan_count}")
+        print(f"NaN count after forward fill: {nan_count_after_ffill}")
+        print(f"NaN filled with forward fill: {original_nan_count - nan_count_after_ffill}")
+        print(f"NaN count after mean imputation: {nan_count_after_imputing}")
+        print(f"NaN filled with mean imputation: {nan_count_after_ffill - nan_count_after_imputing}")
+        '''
+        # 更新字典中的DataFrame
+        dataframes[df_key] = df_filled
+    print("====================数据清洗 Done")
 
-# 处添加噪声 好奇怪 貌似没有起作用 还是过拟合
-noise_level = 0.01  # 噪声水平可以根据需要调整
-for df_key, df in dataframes.items():
-    for col in df.columns:
-        if col not in ['motion', 'sensor']:  # 仅对数值特征添加噪声
-            df[col] = df[col] + np.random.normal(0, noise_level, size=df[col].shape)
+def add_noise() :
+    noise_level = 0.01  # 噪声水平可以根据需要调整
+    for df_key, df in dataframes.items():
+        for col in df.columns:
+            if col not in ['motion', 'sensor']:  # 仅对数值特征添加噪声
+                df[col] = df[col] + np.random.normal(0, noise_level, size=df[col].shape)
 
 
 '''
@@ -93,64 +97,57 @@ for df_key, df in dataframes.items():
 
 在一些情况下，时间特征可以经过适当的工程转换为模型可用的形式。例如，如果您知道某些运动类型在一天中的特定时间更有可能发生，您可以将时间戳转换为一天中的小时来捕获这种周期性。或者，如果您有理由相信运动类型会随着时间推移而发生变化（例如，在长时间的数据收集期间），那么时间也可能成为一个重要特征。
 '''
-# 均值滤波
-for df_key, df in dataframes.items():
-    for col in ['x', 'y', 'z', 'qx', 'qy', 'qz', 'qw', 'roll', 'pitch', 'yaw']:
-        if col in df.columns:
-            df[col] = df[col].rolling(window=5, min_periods=1).mean()
+def mean_filter():
+    # 均值滤波
+    for df_key, df in dataframes.items():
+        for col in ['x', 'y', 'z', 'qx', 'qy', 'qz', 'qw', 'roll', 'pitch', 'yaw']:
+            if col in df.columns:
+                df[col] = df[col].rolling(window=5, min_periods=1).mean()
+    
+    print("====================均值滤波 Done")
 
-print("====================均值滤波 Done")
 
-# 滑动窗口划分和特征提取
-window_size = 20  # 定义窗口大小
-step_size = 10    # 定义步长
-features_list = []
 
-for motion in motions:
-    for sensor in sensors:
-        df_key = f"{motion}{sensor}"
-        df = dataframes[df_key]
-
-        # 根据传感器类型选择列
-        if sensor == '/Orientation':
-            # columns = ['qz', 'qy', 'qx', 'qw', 'roll', 'pitch', 'yaw']
-            '''
-            方向的 qz, qy, qx, qw（四元数），以及 roll, pitch, yaw：
-            四元数和欧拉角（roll, pitch, yaw）都提供了关于设备在空间中方向的信息。
-            通常不需要这两种类型的方向数据，因为它们表示相同的信息。
-            四元数不会受到万向锁的影响，因此更稳定，但欧拉角更直观和易于理解。
-            '''
-            columns = ['roll', 'pitch', 'yaw']
-        else:  # 'Accelerometer' or 'TotalAcceleration'
-            columns = ['x', 'y', 'z']
-
-        for start in range(0, df.shape[0] - window_size + 1, step_size):
+def feature_extraction_for_motion(motion) :
+    '''
+    方向的 qz, qy, qx, qw（四元数），以及 roll, pitch, yaw：
+    四元数和欧拉角（roll, pitch, yaw）都提供了关于设备在空间中方向的信息。
+    通常不需要这两种类型的方向数据，因为它们表示相同的信息。
+    四元数不会受到万向锁的影响，因此更稳定，但欧拉角更直观和易于理解。
+    '''
+    features_list_for_motion = []
+    if dataframes.size() > 0 :
+        for start in range(0, dataframes.shape[0] - window_size + 1, step_size):
             end = start + window_size
-            window_df = df.iloc[start:end]
-            feature = {'motion': motion, 'sensor': sensor}
-
-            # 计算每个选定列的统计特征
-            for col in columns:
-                feature[f'mean_{col}'] = window_df[col].mean()
-                feature[f'std_{col}'] = window_df[col].std()
-                feature[f'skew_{col}'] = skew(window_df[col], nan_policy='omit')
-                feature[f'kurt_{col}'] = kurtosis(window_df[col], nan_policy='omit')
-                feature[f'max_{col}'] = window_df[col].max()
-                feature[f'min_{col}'] = window_df[col].min()
-
+            # Create a dictionary and add the mappings of motion and sensor.
+            feature = {'motion': motion}
+            for sensor in sensors:
+                df = dataframes[f"{motion}{sensor}"]
+                window_df = df.iloc[start:end]
+                # Calculate statistical features for all selected columns.
+                for col in sensor_features[sensor]:
+                    feature[f'mean_{sensor}_{col}'] = window_df[col].mean()
+                    feature[f'std_{sensor}_{col}'] = window_df[col].std()
+                    feature[f'skew_{sensor}_{col}'] = skew(window_df[col], nan_policy='omit')
+                    feature[f'kurt_{sensor}_{col}'] = kurtosis(window_df[col], nan_policy='omit')
+                    feature[f'max_{sensor}_{col}'] = window_df[col].max()
+                    feature[f'min_{sensor}_{col}'] = window_df[col].min()
+        
             # 将特征添加到列表中
-            features_list.append(feature)
+            features_list_for_motion.append(feature)
+    return features_list_for_motion
 
-print("====================滑动窗口划分和特征提取 Done")
+def feature_extraction() :
+    features_list = []
+    # For each motion's every sensor, we need to abstract the features from
+    # data frame's all columns.
+    for motion in motions:
+            features_list.append(
+                feature_extraction_for_motion(motion))
+            # Select columns for each motions.
+    return features_list
+    print("====================滑动窗口划分和特征提取 Done")
 
-# 将特征列表转换为DataFrame
-feature_df = pd.DataFrame(features_list)
-
-feature_df.to_csv('feature_df.csv', sep='\t', index=False, encoding='utf-8')
-
-# 这会将DataFrame df保存为一个以制表符分隔的文本文件，不包含索引。
-
-print("====================将特征列表转换为DataFrame Done")
 '''
 关于列名不同，导致了特征值出现空值的问题。P哥给的建议如下： 
 
@@ -171,65 +168,40 @@ print("====================将特征列表转换为DataFrame Done")
 数据增强：生成额外的数据来填充缺失值，这可以通过模拟或其他数据生成技术来完成，但需要确保生成的数据在统计上与真实数据相似。
 '''
 
-# 移除非数值列
-feature_numeric = feature_df.drop(['motion', 'sensor'], axis=1)
 
-# 空值填充：使用SimpleImputer填充均值
-# imputer = SimpleImputer(strategy='mean')
+def feature_scaling(feature_df) :
+    # 移除非数值列
+    feature_numeric = feature_df.drop(['motion'], axis=1)
+    
+    # 空值填充：使用SimpleImputer填充均值
+    # imputer = SimpleImputer(strategy='mean')
+    
+    # 空值填充：使用SimpleImputer填充0
+    imputer = SimpleImputer(strategy='constant', fill_value=0)
+    feature_numeric_imputed = imputer.fit_transform(feature_numeric)
+    
+    # Feature normalization
+    scaler = StandardScaler()
+    feature_numeric_scaled = scaler.fit_transform(feature_numeric_imputed)
+    
+    # 对类别特征进行处理（目标分类）
+    # 提取类别特征
+    feature_categorical = feature_df[['motion']]
+    label_encoder = LabelEncoder()
+    
+    y = label_encoder.fit_transform(feature_categorical)
+    y = column_or_1d(y, warn=True)
+    print("categorical:======>")
+    print(y)
+    return feature_numeric_scaled, y
+    # 最后，合并数值特征和编码后的类别特征
+    #encoded_features = np.concatenate([feature_numeric_scaled, y], axis=1)
+    
+    #print("现在数据长这样，好丑：")
+    #print(encoded_features[:3])
 
-# 空值填充：使用SimpleImputer填充0
-imputer = SimpleImputer(strategy='constant', fill_value=0)
+    #encoded_features.to_csv('encoded_features.csv', sep='\t', index=False, encoding='utf-8').sparse()
 
-feature_numeric_imputed = imputer.fit_transform(feature_numeric)
-
-# 特征标准化：对数值特征进行标准化
-scaler = StandardScaler()
-feature_numeric_scaled = scaler.fit_transform(feature_numeric_imputed)
-
-# 对类别特征进行处理（目标分类）
-# 提取类别特征
-feature_categorical = feature_df[['motion']]
-label_encoder = LabelEncoder()
-
-y = label_encoder.fit_transform(feature_categorical)
-y = column_or_1d(y, warn=True)
-print("categorical:======>")
-print(y)
-# 最后，合并数值特征和编码后的类别特征
-#encoded_features = np.concatenate([feature_numeric_scaled, y], axis=1)
-
-#print("现在数据长这样，好丑：")
-#print(encoded_features[:3])
-
-#encoded_features.to_csv('encoded_features.csv', sep='\t', index=False, encoding='utf-8').sparse()
-
-print("====================十八般武艺的特征处理 Done")
-
-
-#y = feature_categorical_encoded  # 提取目标变量
-
-# 分割数据集
-X_train_data, X_test_data, y_train_data, y_test_data = train_test_split(feature_numeric_scaled, y, test_size=0.2, random_state=42)
-
-X_train = torch.tensor(X_train_data, dtype=torch.float32)
-X_test = torch.tensor(X_test_data, dtype=torch.float32)
-
-y_train = torch.tensor(y_train_data, dtype=torch.long)
-y_test = torch.tensor(y_test_data, dtype=torch.long)
-
-
-#print("切割后的数据：X_train")
-#print(X_train[:3])
-
-'''
-
-接下来的代码讲道理应该使用pytorch
-然而我困了
-瞎写着玩
-过拟合了
-再见
-
-'''
 # 训练随机森林模型
 
 '''
@@ -257,7 +229,6 @@ svm_classifier.fit(X_train, y_train)
 rf_predictions = rf_classifier.predict(X_test)
 svm_predictions = svm_classifier.predict(X_test)
 '''
-
 
 # Define a DecisionTree
 class DecisionTree(nn.Module):
@@ -335,31 +306,28 @@ class RandomForestClassifier:
         predictions = [tree.predict(X) for tree in self.trees]
         return torch.stack(predictions, dim=0).mode(0).values
 
-# 创建并训练随机森林分类器
-num_trees = 8
-max_depth = 5
-print("Create RandomForestClassifer===========")
-random_forest = RandomForestClassifier(num_trees, max_depth)
-print("Fit RandomForestClassifer===========")
-random_forest.fit(X_train, y_train)
-
-# 预测
-print("RandomForestClassifer predicts()===========")
-rf_predictions = random_forest.predict(X_test)
-
-# 计算准确率
-accuracy = accuracy_score(y_test, rf_predictions)
-print("Accuracy:", accuracy)
 
 
-
-# 评估模型性能
-print("Random Forest Classifier:")
-print("Accuracy:", accuracy_score(y_test, rf_predictions))
-
-print("\nSVM Classifier:")
-#print("Accuracy:", accuracy_score(y_test, svm_predictions))
-
+def evaluate_classifer(y_test, y_predictions, if_print_report) :
+    # 计算准确率
+    accuracy = accuracy_score(y_test, y_predictions)
+    # 混淆矩阵
+    rf_confusion_matrix = confusion_matrix(y_test, y_predictions)
+    # 精确度、召回率和F1分数
+    rf_precision = precision_score(y_test, y_predictions, average='weighted')
+    rf_recall = recall_score(y_test, y_predictions, average='weighted')
+    rf_f1 = f1_score(y_test, y_predictions, average='weighted')
+    if if_print_report :
+        # 打印评估指标
+        print("Accuracy:", accuracy)
+        print(f"Random Forest Confusion Matrix:\n{rf_confusion_matrix}")
+        print(f"Random Forest Precision: {rf_precision}")
+        print(f"Random Forest Recall: {rf_recall}")
+        print(f"Random Forest F1 Score: {rf_f1}")
+        # 分类报告
+        print("Random Forest Classifier Report:")
+        print(classification_report(y_test, y_predictions))
+    return accuracy, rf_precision, rf_recall, rf_f1
 
 # 定义交叉验证策略
 skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
@@ -371,33 +339,38 @@ skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 #print(f"Random Forest CV Accuracy: {rf_cv_accuracy.mean()} (+/- {rf_cv_accuracy.std() * 2})")
 #print(f"SVM CV Accuracy: {svm_cv_accuracy.mean()} (+/- {svm_cv_accuracy.std() * 2})")
 
-# 混淆矩阵
-rf_confusion_matrix = confusion_matrix(y_test, rf_predictions)
-#svm_confusion_matrix = confusion_matrix(y_test, svm_predictions)
 
-# 精确度、召回率和F1分数
-rf_precision = precision_score(y_test, rf_predictions, average='weighted')
-rf_recall = recall_score(y_test, rf_predictions, average='weighted')
-rf_f1 = f1_score(y_test, rf_predictions, average='weighted')
+if __name__=="__main__":
+    print("main")
+    load_data_from_files()
+    data_preprocess()
+    mean_filter()
+    features_list = feature_extraction()
+    # 将特征列表转换为DataFrame
+    feature_df = pd.DataFrame(features_list)
+    feature_df.to_csv('feature_df.csv', sep='\t', index=False, encoding='utf-8')
+    # DataFrame df保存为一个以制表符分隔的文本文件，不包含索引。
+    print("====================将特征列表转换为DataFrame Done")
+    
+'''    # 分割数据集
+    X, y = feature_scaling(feature_df)
+    X_train_data, X_test_data, y_train_data, y_test_data = train_test_split(X, y, test_size=0.2, random_state=42)
 
-#svm_precision = precision_score(y_test, svm_predictions, average='weighted')
-#svm_recall = recall_score(y_test, svm_predictions, average='weighted')
-#svm_f1 = f1_score(y_test, svm_predictions, average='weighted')
+    X_train = torch.tensor(X_train_data, dtype=torch.float32)
+    X_test = torch.tensor(X_test_data, dtype=torch.float32)
+    y_train = torch.tensor(y_train_data, dtype=torch.long)
+    y_test = torch.tensor(y_test_data, dtype=torch.long)
+    
+    # 创建并训练随机森林分类器
+    num_trees = 8
+    max_depth = 5
+    print("Create RandomForestClassifer===========")
+    random_forest = RandomForestClassifier(num_trees, max_depth)
+    print("Fit RandomForestClassifer===========")
+    random_forest.fit(X_train, y_train)
+    # 预测
+    print("RandomForestClassifer predicts()===========")
+    rf_predictions = random_forest.predict(X_test)
+    evaluate_classifer(y_test, rf_predictions, True)'''
 
-# 打印评估指标
-print(f"Random Forest Confusion Matrix:\n{rf_confusion_matrix}")
-print(f"Random Forest Precision: {rf_precision}")
-print(f"Random Forest Recall: {rf_recall}")
-print(f"Random Forest F1 Score: {rf_f1}")
 
-#print(f"SVM Confusion Matrix:\n{svm_confusion_matrix}")
-#print(f"SVM Precision: {svm_precision}")
-#print(f"SVM Recall: {svm_recall}")
-#print(f"SVM F1 Score: {svm_f1}")
-
-# 分类报告
-print("Random Forest Classifier Report:")
-print(classification_report(y_test, rf_predictions))
-
-print("\nSVM Classifier Report:")
-#print(classification_report(y_test, svm_predictions))
