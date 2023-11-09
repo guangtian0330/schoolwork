@@ -1,12 +1,13 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.impute import SimpleImputer
 from scipy.stats import skew, kurtosis
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, classification_report
+from sklearn.svm import SVC
 from sklearn.utils.validation import column_or_1d
 from sklearn.metrics import accuracy_score
 
@@ -298,18 +299,17 @@ def plot_3d_surface(X, y, z):
     R = np.sqrt(X ** 2 + Y ** 2)
     Z = np.sin(R)
     '''
-    # 绘制曲面图
-    # 绘制使用冷暖色图着色的 3D 表面。通过使用 antialiased=False 使表面变得不透明。
+    # Use coolwarm to plot the surface and antialiased=False to disable transparency.
     surf = ax.plot_surface(X, y, z, cmap=cm.coolwarm,
                            linewidth=0, antialiased=False)
 
-    # 定制z轴
+    # set the range for z axis.
     ax.set_zlim(0, 1.01)
     ax.zaxis.set_major_locator(LinearLocator(10))
     # A StrMethodFormatter is used automatically
     ax.zaxis.set_major_formatter('{x:.02f}')
 
-    # 添加一个颜色条形图展示颜色区间
+    # add a colorbar to indicate the meaning of color.
     fig.colorbar(surf, shrink=0.5, aspect=5)
     plt.show()
     
@@ -337,11 +337,14 @@ def evaluate_classifer(y_test, y_predictions, if_print_detailed_report) :
 
 
 def create_train_evaluate_RF(x, y) :
+    print(f"create_train_evaluate_RF with numbers_of_tree = {x} and depth = {y}")
     random_forest = RandomForestClassifier(x, y)
     random_forest.fit(X_train, y_train)
     predictions = random_forest.predict(X_test)
-    return evaluate_classifer(
+    accuracy, precision, recall, f1 =  evaluate_classifer(
         y_test, predictions, False)
+    print(f"evaluating results: accuracy({accuracy}),precision({precision}),recall({recall}),f1({f1})")
+    return accuracy, precision, recall, f1
 
 # Exhausive tuning for different hyper parameters for Random Forest.
 def tune_hyperparameters_for_RF(
@@ -356,57 +359,17 @@ def tune_hyperparameters_for_RF(
     plot_3d_surface(x, y, accuracy_list)
     return best_num_tree, best_max_depth
 
-if __name__=="__main__":
-    dataframe_loaded = load_data_from_files()
-    print(dataframe_loaded)
-    dataframe_loaded = data_preprocess(dataframe_loaded)
-    dataframe_scaled = feature_scaling(dataframe_loaded)
-    dataframe_meaned = mean_filter(dataframe_scaled)
-    features_list = feature_extraction(dataframe_meaned)
-    
-    # Convert the list to data frame to save in a csv file.
-    feature_df = pd.DataFrame(features_list)
-    feature_df.to_csv('feature_df.csv', sep=',', index=False, encoding='utf-8')
-    
-    # Split X from y to do data spliting.
-    X = feature_df.iloc[:, :-1]
-    y = feature_df.iloc[:, -1]
-    
-    # Data spliting
-    X_train_data, X_test_data, y_train_data, y_test_data = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    # Convert data to tensor type.
-    X_train = torch.tensor(X_train_data.to_numpy(), dtype=torch.float32)
-    X_test = torch.tensor(X_test_data.to_numpy(), dtype=torch.float32)
-    y_train = torch.tensor(y_train_data.to_numpy(), dtype=torch.long)
-    y_test = torch.tensor(y_test_data.to_numpy(), dtype=torch.long)
-    
-    # Create and train a Random Forest.
-    # Make an initiall guess for number of trees and maximum depth.
-    num_trees = 5
-    max_depth = 5
-    best_num_tree, best_max_depth = tune_hyperparameters_for_RF(
-        num_trees, max_depth, X_train, X_test, y_train, y_test)
-    
-    print("Create RandomForestClassifer===========")
-    random_forest = RandomForestClassifier(best_num_tree, best_max_depth)
-    print("Fit RandomForestClassifer===========")
-    random_forest.fit(X_train, y_train)
-    print("RandomForestClassifer predicts()===========")
-    rf_predictions = random_forest.predict(X_test)
-    evaluate_classifer(y_test, rf_predictions, True)
-
 
 #-----------------------------------------
-# 定义交叉验证策略
-#skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-# 对于随机森林和SVM，使用交叉验证计算准确度
-#rf_cv_accuracy = cross_val_score(rf_classifier, encoded_features, y, cv=skf, scoring='accuracy')
-#svm_cv_accuracy = cross_val_score(svm_classifier, encoded_features, y, cv=skf, scoring='accuracy')
+def SVM_by_sklearn(X_train, y_train):
+    # 创建SVM分类器实例
+    svm_classifier = SVC(kernel='linear')  # 你可以选择不同的核函数
 
-#print(f"Random Forest CV Accuracy: {rf_cv_accuracy.mean()} (+/- {rf_cv_accuracy.std() * 2})")
-#print(f"SVM CV Accuracy: {svm_cv_accuracy.mean()} (+/- {svm_cv_accuracy.std() * 2})")
+    # 训练模型
+    svm_classifier.fit(X_train, y_train)
+
+    return svm_classifier
 
 # 定义一个简单的线性分类器模型
 class LinearSVM(nn.Module):
@@ -466,3 +429,68 @@ def SVM_create() :
         _, predicted = torch.max(output, 1)
         correct = (predicted == y_test).sum().item()
         print(f'Accuracy: {correct / len(y) * 100}%')
+
+
+if __name__=="__main__":
+    dataframe_loaded = load_data_from_files()
+    print(dataframe_loaded)
+    dataframe_loaded = data_preprocess(dataframe_loaded)
+    dataframe_scaled = feature_scaling(dataframe_loaded)
+    dataframe_meaned = mean_filter(dataframe_scaled)
+    features_list = feature_extraction(dataframe_meaned)
+    
+    # Convert the list to data frame to save in a csv file.
+    feature_df = pd.DataFrame(features_list)
+    feature_df.to_csv('feature_df.csv', sep=',', index=False, encoding='utf-8')
+    
+    # Split X from y to do data spliting.
+    X = feature_df.iloc[:, :-1]
+    y = feature_df.iloc[:, -1]
+    
+    # Data spliting
+    X_train_data, X_test_data, y_train_data, y_test_data = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Create an SVM classifier instance
+    # Set the parameter grid that you want to tune
+    param_grid = {'C': [0.1, 1, 10], 'kernel': ['linear', 'rbf']}
+
+    # Create an SVM classifier instance
+    svm_classifier = SVC()
+
+    # Create a GridSearchCV instance
+    grid_search = GridSearchCV(svm_classifier, param_grid, cv=5)  # 5 fold cross verification
+
+    # Perform grid search and cross-validation
+    grid_search.fit(X_train_data, y_train_data)
+
+    # Print optimum parameter
+    print("Best parameters:", grid_search.best_params_)
+
+    # Make predictions on the test set using the best parameters
+    y_pred = grid_search.predict(X_test_data)
+
+    # Generate and print detailed classification reports
+    print(classification_report(y_test_data, y_pred))
+    print("Accuracy:", accuracy_score(y_test_data, y_pred))
+
+    # Convert data to tensor type.
+    X_train = torch.tensor(X_train_data.to_numpy(), dtype=torch.float32)
+    X_test = torch.tensor(X_test_data.to_numpy(), dtype=torch.float32)
+    y_train = torch.tensor(y_train_data.to_numpy(), dtype=torch.long)
+    y_test = torch.tensor(y_test_data.to_numpy(), dtype=torch.long)
+    
+    # Create and train a Random Forest.
+    # Make an initiall guess for number of trees and maximum depth.
+    num_trees = 5
+    max_depth = 5
+    best_num_tree, best_max_depth = tune_hyperparameters_for_RF(
+        num_trees, max_depth, X_train, X_test, y_train, y_test)
+    #best_num_tree = num_trees
+    #best_max_depth = max_depth
+    print("Create RandomForestClassifer===========")
+    random_forest = RandomForestClassifier(best_num_tree, best_max_depth)
+    print("Fit RandomForestClassifer===========")
+    random_forest.fit(X_train, y_train)
+    print("RandomForestClassifer predicts()===========")
+    rf_predictions = random_forest.predict(X_test)
+    evaluate_classifer(y_test, rf_predictions, True)
