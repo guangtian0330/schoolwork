@@ -1,12 +1,13 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.impute import SimpleImputer
 from scipy.stats import skew, kurtosis
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, classification_report
+from sklearn.svm import SVC
 from sklearn.utils.validation import column_or_1d
 from sklearn.metrics import accuracy_score
 
@@ -304,6 +305,16 @@ skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 #print(f"Random Forest CV Accuracy: {rf_cv_accuracy.mean()} (+/- {rf_cv_accuracy.std() * 2})")
 #print(f"SVM CV Accuracy: {svm_cv_accuracy.mean()} (+/- {svm_cv_accuracy.std() * 2})")
 
+def SVM_by_sklearn(X_train, y_train):
+    # 创建SVM分类器实例
+    svm_classifier = SVC(kernel='linear')  # 你可以选择不同的核函数
+
+    # 训练模型
+    svm_classifier.fit(X_train, y_train)
+
+    return svm_classifier
+
+
 if __name__=="__main__":
     #print("main")
     dataframe_loaded = load_data_from_files()
@@ -324,11 +335,42 @@ if __name__=="__main__":
     X_train_data, X_test_data, y_train_data, y_test_data = train_test_split(X, y, test_size=0.2, random_state=42)
     print(X_train_data)
 
+
+    #------
+    # Create an SVM classifier instance
+    # Set the parameter grid that you want to tune
+    param_grid = {'C': [0.1, 1, 10], 'kernel': ['linear', 'rbf']}
+
+    # Create an SVM classifier instance
+    svm_classifier = SVC()
+
+    # Create a GridSearchCV instance
+    grid_search = GridSearchCV(svm_classifier, param_grid, cv=5)  # 5 fold cross verification
+
+
+    # Perform grid search and cross-validation
+    grid_search.fit(X_train_data, y_train_data)
+
+    # Print optimum parameter
+    print("Best parameters:", grid_search.best_params_)
+
+    # Make predictions on the test set using the best parameters
+    y_pred = grid_search.predict(X_test_data)
+
+    # Generate and print detailed classification reports
+    from sklearn.metrics import classification_report, accuracy_score
+
+    print(classification_report(y_test_data, y_pred))
+    print("Accuracy:", accuracy_score(y_test_data, y_pred))
+
+
+
+
     X_train = torch.tensor(X_train_data.to_numpy(), dtype=torch.float32)
     X_test = torch.tensor(X_test_data.to_numpy(), dtype=torch.float32)
     y_train = torch.tensor(y_train_data.to_numpy(), dtype=torch.long)
     y_test = torch.tensor(y_test_data.to_numpy(), dtype=torch.long)
-    
+
     # 创建并训练随机森林分类器
     num_trees = 8
     max_depth = 5
@@ -403,3 +445,6 @@ def SVM_create() :
         _, predicted = torch.max(output, 1)
         correct = (predicted == y_test).sum().item()
         print(f'Accuracy: {correct / len(y) * 100}%')
+
+
+
