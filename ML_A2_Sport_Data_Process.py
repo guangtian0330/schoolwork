@@ -351,12 +351,15 @@ def tune_hyperparameters_for_RF(
         num_trees, max_depth, X_train, X_test, y_train, y_test) :
     best_num_tree = num_trees
     best_max_depth = max_depth
-    numbers_of_tree = np.arange(best_num_tree, 1001, 2)
+    numbers_of_tree = np.arange(best_num_tree, 30, 2)
     max_depths = np.arange(best_max_depth, 20, 1)
     x, y = np.meshgrid(numbers_of_tree, max_depths)
     ufunc_hyper_tuning = np.frompyfunc(create_train_evaluate_RF, 2, 4)
     accuracy_list, rf_precision_list, rf_recall_list, rf_f1_list = ufunc_hyper_tuning(x, y)
     plot_3d_surface(x, y, accuracy_list)
+    max_index = np.unravel_index(np.argmax(rf_f1_list), rf_f1_list.shape)
+    best_num_tree, best_max_depth = x[max_index], y[max_index]
+    print(f" best_num_tree = {best_num_tree}, best_max_depth = {best_max_depth}")
     return best_num_tree, best_max_depth
 
 
