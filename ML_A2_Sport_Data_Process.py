@@ -407,7 +407,7 @@ if __name__=="__main__":
     # Generate and print detailed classification reports
     print(classification_report(y_test_data, y_pred))
     print("Accuracy:", accuracy_score(y_test_data, y_pred))
-    evaluate_classifer(y_test_data, y_pred, True, "RandomForest")
+    evaluate_classifer(y_test_data, y_pred, True, "SVM")
     # Convert data to tensor type.
     X_train = torch.tensor(X_train_data.to_numpy(), dtype=torch.float32)
     X_test = torch.tensor(X_test_data.to_numpy(), dtype=torch.float32)
