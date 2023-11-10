@@ -313,7 +313,7 @@ def plot_3d_surface(X, y, z):
     fig.colorbar(surf, shrink=0.5, aspect=5)
     plt.show()
     
-def evaluate_classifer(y_test, y_predictions, if_print_detailed_report) :
+def evaluate_classifer(y_test, y_predictions, if_print_detailed_report, algorithm) :
     # Calculate the accuracy.
     accuracy = accuracy_score(y_test, y_predictions)
     # Calculate the precision, recall rate and f1 score.
@@ -326,12 +326,12 @@ def evaluate_classifer(y_test, y_predictions, if_print_detailed_report) :
         rf_confusion_matrix = confusion_matrix(y_test, y_predictions)
         # Print the report if necessary.
         print("Accuracy:", accuracy)
-        print(f"Random Forest Confusion Matrix:\n{rf_confusion_matrix}")
-        print(f"Random Forest Precision: {rf_precision}")
-        print(f"Random Forest Recall: {rf_recall}")
-        print(f"Random Forest F1 Score: {rf_f1}")
+        print(f"{algorithm} Confusion Matrix:\n{rf_confusion_matrix}")
+        print(f"{algorithm} Precision: {rf_precision}")
+        print(f"{algorithm} Recall: {rf_recall}")
+        print(f"{algorithm} F1 Score: {rf_f1}")
         # Print the classifer analysis if necessary.
-        print("Random Forest Classifier Report:")
+        print(f"{algorithm} Classifier Report:")
         print(classification_report(y_test, y_predictions))
     return accuracy, rf_precision, rf_recall, rf_f1
 
@@ -363,75 +363,7 @@ def tune_hyperparameters_for_RF(
     return best_num_tree, best_max_depth
 
 
-#-----------------------------------------
 
-def SVM_by_sklearn(X_train, y_train):
-    # 创建SVM分类器实例
-    svm_classifier = SVC(kernel='linear')  # 你可以选择不同的核函数
-
-    # 训练模型
-    svm_classifier.fit(X_train, y_train)
-
-    return svm_classifier
-
-# 定义一个简单的线性分类器模型
-class LinearSVM(nn.Module):
-    def __init__(self):
-        super(LinearSVM, self).__init__()
-        # 这里的10是输入特征的数量，3是类别的数量
-        self.linear = nn.Linear(36, 3)
-
-    def forward(self, x):
-        return self.linear(x)
-
-
-# 确定多分类Hinge损失
-class MultiClassHingeLoss(nn.Module):
-    def __init__(self):
-        super(MultiClassHingeLoss, self).__init__()
-
-    def forward(self, output, target):
-        """
-        output (batch_size, n_classes): 模型输出
-        target (batch_size): 实际类别的索引
-        """
-        # 确定每个样本的正确分类的得分
-        correct_class_scores = output[torch.arange(0, output.size(0)).long(), target].view(-1, 1)
-
-        # 比较正确分类得分与其他分类得分的差距，并计算损失
-        margin = 1.0
-        loss = output - correct_class_scores + margin
-        # 确保正确的分类不参与损失计算
-        loss[torch.arange(0, output.size(0)).long(), target] = 0
-        # 只取正的部分，相当于max(0, .)
-        loss = torch.sum(torch.clamp(loss, min=0))
-        return loss
-
-
-def SVM_create() :
-    # 初始化模型、损失函数和优化器
-    model = LinearSVM()
-    criterion = MultiClassHingeLoss()
-    optimizer = SGD(model.parameters(), lr=0.01)
-    
-    
-    
-    # 训练模型
-    for epoch in range(20):  # 训练20个epoch
-        optimizer.zero_grad()  # 清除之前的梯度
-        output = model(X_train)  # 前向传播
-        loss = criterion(output, y_train)  # 计算损失
-        loss.backward()  # 反向传播
-        optimizer.step()  # 更新权重
-    
-        print(f'Epoch {epoch + 1}, Loss: {loss.item()}')
-    
-    # 模型评估
-    with torch.no_grad():
-        output = model(X_test)
-        _, predicted = torch.max(output, 1)
-        correct = (predicted == y_test).sum().item()
-        print(f'Accuracy: {correct / len(y) * 100}%')
 
 
 if __name__=="__main__":
@@ -475,7 +407,7 @@ if __name__=="__main__":
     # Generate and print detailed classification reports
     print(classification_report(y_test_data, y_pred))
     print("Accuracy:", accuracy_score(y_test_data, y_pred))
-
+    evaluate_classifer(y_test_data, y_pred, True, "RandomForest")
     # Convert data to tensor type.
     X_train = torch.tensor(X_train_data.to_numpy(), dtype=torch.float32)
     X_test = torch.tensor(X_test_data.to_numpy(), dtype=torch.float32)
@@ -496,4 +428,4 @@ if __name__=="__main__":
     random_forest.fit(X_train, y_train)
     print("RandomForestClassifer predicts()===========")
     rf_predictions = random_forest.predict(X_test)
-    evaluate_classifer(y_test, rf_predictions, True)
+    evaluate_classifer(y_test, rf_predictions, True, "RandomForest")
