@@ -388,24 +388,18 @@ if __name__=="__main__":
     # Create an SVM classifier instance
     # Set the parameter grid that you want to tune
     param_grid = {'C': [0.1, 1, 10], 'kernel': ['linear', 'rbf']}
-
     # Create an SVM classifier instance
     svm_classifier = SVC()
-
     # Create a GridSearchCV instance
     grid_search = GridSearchCV(svm_classifier, param_grid, cv=5)  # 5 fold cross verification
-
     # Perform grid search and cross-validation
     grid_search.fit(X_train_data, y_train_data)
-
     # Print optimum parameter
     print("Best parameters:", grid_search.best_params_)
-
     # Make predictions on the test set using the best parameters
     y_pred = grid_search.predict(X_test_data)
 
     # Generate and print detailed classification reports
-    print(classification_report(y_test_data, y_pred))
     evaluate_classifer(y_test_data, y_pred, True, "SVM")
     # Convert data to tensor type.
     X_train = torch.tensor(X_train_data.to_numpy(), dtype=torch.float32)
