@@ -274,7 +274,7 @@ class RandomForestClassifier:
 
 
 
-def evaluate_classifer(y_test, y_predictions, if_print_report) :
+def evaluate_classifer(y_test, y_predictions, if_print_report, algorithm_name) :
     # 计算准确率
     accuracy = accuracy_score(y_test, y_predictions)
     # 混淆矩阵
@@ -286,12 +286,12 @@ def evaluate_classifer(y_test, y_predictions, if_print_report) :
     if if_print_report :
         # 打印评估指标
         print("Accuracy:", accuracy)
-        print(f"Random Forest Confusion Matrix:\n{rf_confusion_matrix}")
-        print(f"Random Forest Precision: {rf_precision}")
-        print(f"Random Forest Recall: {rf_recall}")
-        print(f"Random Forest F1 Score: {rf_f1}")
+        print(f"{algorithm_name} Confusion Matrix:\n{rf_confusion_matrix}")
+        print(f"{algorithm_name} Precision: {rf_precision}")
+        print(f"{algorithm_name} Recall: {rf_recall}")
+        print(f"{algorithm_name} F1 Score: {rf_f1}")
         # 分类报告
-        print("Random Forest Classifier Report:")
+        print(f"{algorithm_name} Classifier Report:")
         print(classification_report(y_test, y_predictions))
     return accuracy, rf_precision, rf_recall, rf_f1
 
@@ -357,14 +357,13 @@ if __name__=="__main__":
     # Make predictions on the test set using the best parameters
     y_pred = grid_search.predict(X_test_data)
 
-    # Generate and print detailed classification reports
-    from sklearn.metrics import classification_report, accuracy_score
+    # # Generate and print detailed classification reports
+    # from sklearn.metrics import classification_report, accuracy_score
+    #
+    # print(classification_report(y_test_data, y_pred))
+    # print("Accuracy:", accuracy_score(y_test_data, y_pred))
 
-    print(classification_report(y_test_data, y_pred))
-    print("Accuracy:", accuracy_score(y_test_data, y_pred))
-
-
-
+    evaluate_classifer(y_test_data, y_pred, True, "SVM")
 
     X_train = torch.tensor(X_train_data.to_numpy(), dtype=torch.float32)
     X_test = torch.tensor(X_test_data.to_numpy(), dtype=torch.float32)
@@ -381,7 +380,7 @@ if __name__=="__main__":
     # 预测
     print("RandomForestClassifer predicts()===========")
     rf_predictions = random_forest.predict(X_test)
-    evaluate_classifer(y_test, rf_predictions, True)
+    evaluate_classifer(y_test, rf_predictions, True, "RandomForest")
 
 
 #-----------------------------------------
