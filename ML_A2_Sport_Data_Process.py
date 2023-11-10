@@ -19,17 +19,38 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from torch.optim import SGD
 
-# 数据加载  ./Jumping_Jack_x10/Accelerometer
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from matplotlib.ticker import LinearLocator
+
+# Define the name list of motions and sensors.
+# There are 3 motions and each motion has dataset from 3 sensors.
 motions = ['./Jumping_Jack_x10', './Lunges_x10', './Squat_x10']
 sensors = ['/Accelerometer', '/Orientation', '/TotalAcceleration']
+
+
 cols_selected = ['x_Acc', 'y_Acc', 'z_Acc','roll', 'pitch', 'yaw',
                    'x_Total', 'y_Total', 'z_Total','motion']
-# sensors = ['/TotalAcceleration']
+
+# Global variable dataframe_loaded
 dataframe_loaded = pd.DataFrame()
 
-# 滑动窗口划分和特征提取
-window_size = 100  # 定义窗口大小
-step_size = 50    # 定义步长
+# Define the size of window and stepsize. 
+# The step size is smaller than window size indicating that windows have overlaps
+window_size = 100
+step_size = 50
+
+'''
+load files for a referred motion and return a dataframe.
+'time' and 'seconds_elapsed' are removed after data is loaded.
+They are dropped because:
+It doesn't involve any predictive information.
+不携带预测性信息：如果时间戳本身与目标变量（在您的案例中是运动类型）无关，则它们不会为模型提供任何有价值的信息。比如，如果运动类型不随时间变化而变化，那么时间特征可能对模型预测不会有帮助。
+数据泄露：如果时间相关的特征与数据收集的方式有关，而不是与预测目标本身有关，那么它们可能会导致数据泄露，使模型过度拟合训练集中的“时间”模式，而这些模式在未来的数据中可能并不适用。
+模型复杂性：保留不相关或不重要的特征会增加模型的复杂性，可能导致模型训练时间更长，而且如果特征过多还可能导致维度灾难。
+时间序列问题：如果数据是时间序列数据，'time' 和 'seconds_elapsed' 可能需要以不同的方式处理，如通过时间序列分析而不是标准的机器学习模型。对于这种数据，通常会使用特殊的时间序列模型或将时间信息转换为其他更有用的特征。
+在一些情况下，时间特征可以经过适当的工程转换为模型可用的形式。例如，如果您知道某些运动类型在一天中的特定时间更有可能发生，您可以将时间戳转换为一天中的小时来捕获这种周期性。或者，如果您有理由相信运动类型会随着时间推移而发生变化（例如，在长时间的数据收集期间），那么时间也可能成为一个重要特征。
+'''
 
 def loadFileForMotion(motion) :
     filenames = [f"{motion}{sensor}.csv" for sensor in sensors]
@@ -41,6 +62,10 @@ def loadFileForMotion(motion) :
     dataframe['motion'] = motion
     return dataframe
 
+'''
+ The returned framedata combines all features from all sensors for each motion
+ with the axis=1 and then appends all motions in the list.
+'''
 def load_data_from_files() :
     dataframe_loaded = pd.concat(
         [loadFileForMotion(motions[0]),
@@ -49,49 +74,46 @@ def load_data_from_files() :
     dataframe_loaded = dataframe_loaded[cols_selected]
     return dataframe_loaded
 
-
+'''
+ Data preprocess.  This function drop duplicates, fulfill NaN with mean values.
+'''
 def data_preprocess(dataframe_loaded):
-    # 数据清洗
-
-    #for df in dataframe_loaded.items():
-    # 计算原始 NaN 值的数量
-    #original_nan_count = dataframe_loaded.isna().sum().sum()
-    dataframe_loaded.drop_duplicates(inplace=True)
-    # 替换无穷大值为NaN
-    dataframe_loaded.replace([np.inf, -np.inf], np.nan, inplace=True)
-    # 前向填充处理一部分 NaN 值
-    dataframe_loaded.ffill(inplace=True)
-
-    # 计算前向填充后 NaN 值的数量
-    #nan_count_after_ffill = dataframe_loaded.isna().sum().sum()
-    y = dataframe_loaded['motion']
-    print("============data_process===========")
-    X = dataframe_loaded.drop('motion', axis=1)
-    print("===================================")
-    # 创建一个 imputer 对象，用列的均值填充剩余的 NaN 值
-    imputer = SimpleImputer(missing_values=np.nan, strategy='mean')
-
-    # 应用 imputer 到每个 dataframe
-    X = pd.DataFrame(imputer.fit_transform(X), columns=X.columns)
-
-    # 计算填充均值后 NaN 值的数量
-    #nan_count_after_imputing = df_filled.isna().sum().sum()
-
-    # 打印信息
-    '''        
-    print(f"{df_key}:")
-    print(f"Original NaN count: {original_nan_count}")
-    print(f"NaN count after forward fill: {nan_count_after_ffill}")
-    print(f"NaN filled with forward fill: {original_nan_count - nan_count_after_ffill}")
-    print(f"NaN count after mean imputation: {nan_count_after_imputing}")
-    print(f"NaN filled with mean imputation: {nan_count_after_ffill - nan_count_after_imputing}")
-    '''
-    # 更新字典中的DataFrame
-    print("====================数据清洗 Done")
-    X.reset_index(drop=True, inplace=True)
-    y.reset_index(drop=True, inplace=True)
-
-    return pd.concat([X, y], axis=1)
+    print("==========ENTER  data_process <<<<<<<<<<<")
+    if not dataframe_loaded.empty:
+        #for df in dataframe_loaded.items():
+        #original_nan_count = dataframe_loaded.isna().sum().sum()
+        dataframe_loaded.drop_duplicates(inplace=True)
+        dataframe_loaded.replace([np.inf, -np.inf], np.nan, inplace=True)
+        dataframe_loaded.ffill(inplace=True)
+            
+        # split 'motion' column before fullfill NaN with mean values, 
+        # since 'motion' column is not numerical.
+        y = dataframe_loaded['motion']
+        X = dataframe_loaded.drop('motion', axis=1)
+        
+        # Create an Inputer and fulfuill NaN with mean values.
+        # Apply this imputer to all columns.
+        imputer = SimpleImputer(missing_values=np.nan, strategy='mean')
+        X = pd.DataFrame(imputer.fit_transform(X), columns=X.columns)
+    
+        # Print debugging message
+        '''        
+        print(f"{df_key}:")
+        print(f"Original NaN count: {original_nan_count}")
+        print(f"NaN count after forward fill: {nan_count_after_ffill}")
+        print(f"NaN filled with forward fill: {original_nan_count - nan_count_after_ffill}")
+        print(f"NaN count after mean imputation: {nan_count_after_imputing}")
+        print(f"NaN filled with mean imputation: {nan_count_after_ffill - nan_count_after_imputing}")
+        '''
+        # Before combining X and y it's suggested to reset index, otherwise
+        # they will have common index.
+        X.reset_index(drop=True, inplace=True)
+        y.reset_index(drop=True, inplace=True)
+        print(">>>>>>>>>>>LEAVE  data_process ==============")
+        return pd.concat([X, y], axis=1)
+    else:
+        print(">>>>>>>>>>>LEAVE  data_process ==============")
+        return dataframe_loaded
 
 def add_noise() :
     noise_level = 0.01  # 噪声水平可以根据需要调整
@@ -100,34 +122,22 @@ def add_noise() :
             if col not in ['motion', 'sensor']:  # 仅对数值特征添加噪声
                 df[col] = df[col] + np.random.normal(0, noise_level, size=df[col].shape)
 
-
-'''
-去除 'time' 和 'seconds_elapsed' 这两个特征通常是基于以下几个考虑：
-不携带预测性信息：如果时间戳本身与目标变量（在您的案例中是运动类型）无关，则它们不会为模型提供任何有价值的信息。比如，如果运动类型不随时间变化而变化，那么时间特征可能对模型预测不会有帮助。
-数据泄露：如果时间相关的特征与数据收集的方式有关，而不是与预测目标本身有关，那么它们可能会导致数据泄露，使模型过度拟合训练集中的“时间”模式，而这些模式在未来的数据中可能并不适用。
-模型复杂性：保留不相关或不重要的特征会增加模型的复杂性，可能导致模型训练时间更长，而且如果特征过多还可能导致维度灾难。
-时间序列问题：如果数据是时间序列数据，'time' 和 'seconds_elapsed' 可能需要以不同的方式处理，如通过时间序列分析而不是标准的机器学习模型。对于这种数据，通常会使用特殊的时间序列模型或将时间信息转换为其他更有用的特征。
-在一些情况下，时间特征可以经过适当的工程转换为模型可用的形式。例如，如果您知道某些运动类型在一天中的特定时间更有可能发生，您可以将时间戳转换为一天中的小时来捕获这种周期性。或者，如果您有理由相信运动类型会随着时间推移而发生变化（例如，在长时间的数据收集期间），那么时间也可能成为一个重要特征。
-'''
 def mean_filter(dataframe_loaded):
-    # 均值滤波
+    print("==========ENTER  mean_filter <<<<<<<<<<<")
+    # Mean filtering
     for col in cols_selected:
         dataframe_loaded[col] = dataframe_loaded[col].rolling(window=window_size, min_periods=1).mean()
-    print("====================均值滤波 Done")
+    print(">>>>>>>>>>>LEAVE  mean_filter ==============")
     return dataframe_loaded
-            
+       
+# We choose to extract features 'x_Acc', 'y_Acc', 'z_Acc','roll', 'pitch', 'yaw',
+# 'x_Total', 'y_Total', 'z_Total', where x_Acc is from the x value for accelerometer,
+# and x_Total is from the total accelerate. We change the name to discriminate them.
+# euler angles('roll', 'pitch', 'yaw') contain the same information with quaternion values so
+# we only choose the euler angles because they are more intuitive and easier to
+# understand.
 def feature_extraction(dataframe_loaded):
-    '''
-    方向的 qz, qy, qx, qw（四元数），以及 roll, pitch, yaw：
-    四元数和欧拉角（roll, pitch, yaw）都提供了关于设备在空间中方向的信息。
-    通常不需要这两种类型的方向数据，因为它们表示相同的信息。
-    四元数不会受到万向锁的影响，因此更稳定，但欧拉角更直观和易于理解。
-    '''
-    print("===========> feature_extraction")
-    print(dataframe_loaded)
-    # 移除非数值列
-    #feature_numeric = dataframe_loaded.drop(['motion'], axis=1)
-    
+    print("==========ENTER  feature_extraction <<<<<<<<<<<")    
     features = []
     cols = ['x_Acc', 'y_Acc', 'z_Acc','roll', 'pitch', 'yaw',
             'x_Total', 'y_Total', 'z_Total']
@@ -145,56 +155,38 @@ def feature_extraction(dataframe_loaded):
         ]
         line.append(round(window_df['motion'].iloc[0]))
         features.append(line)
+    print(">>>>>>>>>>>LEAVE  feature_extraction ==============")
     return features
 
 
-'''
-关于列名不同，导致了特征值出现空值的问题。P哥给的建议如下： 
-数据对齐：您应该确保在合并不同数据源的特征前，所有特征都能对齐。例如，如果某个特征仅在某些传感器中存在，您可以在其他传感器的特征集中添加该特征并填充默认值（如0或NaN）。这将保持特征集的大小一致，同时保留了哪些传感器提供了哪些数据的信息。
-自定义填充策略：针对每种传感器数据特征的缺失值，您可以定义一个合理的填充策略。例如，对于Orientation传感器数据中不存在的x, y, z列，您可以考虑填充为0，因为这可能表示该方向上的加速度或旋转角度为零。但请注意，这种策略应根据实际物理含义谨慎选择。
-特征工程：您可以创建更复杂的特征，比如基于现有数据计算出新的统计量或者结合不同传感器的数据计算出交叉特征。例如，您可以使用Orientation和Accelerometer数据计算出某种动态行为模式的特征。
-多模型方法：构建多个模型，每个模型专注于不同传感器的数据。最后，您可以通过集成学习方法（如投票、堆叠或融合）来结合这些模型的预测，从而进行最终的运动类型识别。
-特征选择：如果某些特征在合并后通常是缺失的，可能表明这些特征对于某些运动类型的识别并不重要。您可以考虑仅使用在所有传感器数据中一致出现的特征。
-异常值处理：在处理特征之前，先进行异常值检测，确保所有的特征都在合理的范围内。如果检测到异常值，可以适当处理（例如，通过替换为中位数或均值）。
-模型选择：有些机器学习模型可以处理缺失值，例如XGBoost或LightGBM。您可以选择这样的模型来避免预处理阶段的复杂填充策略。
-数据增强：生成额外的数据来填充缺失值，这可以通过模拟或其他数据生成技术来完成，但需要确保生成的数据在统计上与真实数据相似。
-'''
-
-
+# Feature scaling is necessary to SVM which is more sensitve to feature scalings
+# but for Random Forest this scaling operation is unecessary.
 def feature_scaling(feature_df) :
-    
-    # 空值填充：使用SimpleImputer填充均值
-    # imputer = SimpleImputer(strategy='mean')
-    
-    # 空值填充：使用SimpleImputer填充0
-    imputer = SimpleImputer(strategy='constant', fill_value=0)
-    
+    print("==========ENTER  feature_scaling <<<<<<<<<<<")    
+    # Fulfill NaN values with mean values.
+    imputer = SimpleImputer(strategy='mean')
+
+    # Split motion and other columns so we can scale the data parts.
     y = dataframe_loaded['motion']
     X = dataframe_loaded.drop('motion', axis=1)
     
-    # Feature normalization
+    # Feature scaling
     X_imputed = imputer.fit_transform(X)
+    # SVM is more sensitive to feature scales so the standardScaler can a better fit.
     scaler = StandardScaler()
+    #scaler = MinMaxScaler()
     X_imputed_scaled = pd.DataFrame(scaler.fit_transform(X_imputed), columns=X.columns)
 
-    # 对类别特征进行处理（目标分类）
-    # 提取类别特征
-    print("=========feature_scaling=========")
+    # Use label encoder to transform motion column to numerical values.
     label_encoder = LabelEncoder()
     y = pd.DataFrame(label_encoder.fit_transform(y), columns = ['motion'])
-    print(y.shape[0], feature_df[['motion']].shape[0])
-    print(y)
-
+ 
+    # Combine X and y before returnning it.
     X_imputed_scaled.reset_index(drop=True, inplace=True)
     y.reset_index(drop=True, inplace=True)
-
     feature_numeric_scaled = pd.concat([X_imputed_scaled, y], axis=1)
-    
-    print("categorical:======>")
-    print(feature_numeric_scaled)
+    print(">>>>>>>>>>>LEAVE  feature_scaling ==============")
     return feature_numeric_scaled
-
-# 训练随机森林模型
 
 # Define a DecisionTree
 class DecisionTree(nn.Module):
@@ -202,11 +194,16 @@ class DecisionTree(nn.Module):
         super(DecisionTree, self).__init__()
         self.max_depth = max_depth
         self.tree = None
-
+    # This function is responsible for building the decision tree by recursively
+    # dividing the training data into multiple leaf nodes.
+    # It's used to create a hierarchy of decision nodes.
     def fit(self, X, y, depth=0):
+        # If the tress reaches its maximun depth, then just return the
+        # the majority of results. 
         if depth >= self.max_depth:
+            # Return the dictionary variable type, to be compatible with the tree.
             return {"class": torch.bincount(y).argmax()}
-        
+        # If there's only one leaf, then just return it.
         if len(torch.unique(y)) == 1:
             return {"class": y[0]}
 
@@ -221,6 +218,13 @@ class DecisionTree(nn.Module):
             for value in unique_values:
                 split_mask = feature_values <= value
                 left, right = y[split_mask], y[~split_mask]
+                # The Gini impurity is a metric commonly used in decision tree
+                # to evaluate how well a split separates the data into two
+                # groups (left and right).
+                # This equation sums up the impurities of the left and right 
+                # child nodes, where the weights are the proportions of samples 
+                # in each child node relative to the total number of samples in
+                # the current node.
                 gini = (len(left) / num_samples) * self.gini_impurity(left) + (len(right) / num_samples) * self.gini_impurity(right)
                 if gini < best_gini:
                     best_gini = gini
@@ -229,7 +233,10 @@ class DecisionTree(nn.Module):
 
         if best_gini == 1.0:
             return {"class": torch.bincount(y).argmax()}
-
+        # Define a tree in a dictionary, and it is the return value.
+        # Sometimes it returns a node and sometimes it returns a sub-tree.
+        # So it's vital to keep the return value of the same time. The node 
+        # needs to be defined as a dictionary.
         self.tree = {
             "feature_index": best_split[0],
             "split_value": best_split[1],
@@ -238,9 +245,17 @@ class DecisionTree(nn.Module):
         }
         return self.tree
 
+    # Calculate the gini impurity for a node:
+    # Gini(S) = 1 − ∑Pi^2
+    # Pi is the probability that category i appears in the training sample set S.
+    # Referenced by 
+    # Hao, Z. and Gou, G., 2019. Survey of machine learning random forest
+    # algorithms. In 3rd International Conference on Computer Engineering,
+    # Information Science and Internet Technology (pp. 50-59).
     def gini_impurity(self, y):
         if len(y) == 0:
             return 0
+        # Calculate the probability.
         p = torch.bincount(y) / len(y)
         return 1 - torch.sum(p ** 2)
 
@@ -248,10 +263,11 @@ class DecisionTree(nn.Module):
         if self.tree is None:
             raise Exception("The tree is not trained yet.")
         return torch.tensor([self._predict(x, self.tree) for x in X])
-
+    # This is incursively exploring all branches and all nodes of the tree.
     def _predict(self, x, node):
         if "split_value" not in node:
-            return node["class"]  # 叶子节点返回类别标签或回归值
+            # Return the class lable, which is also the node.
+            return node["class"]
         if x[node["feature_index"]] <= node["split_value"]:
             return self._predict(x, node["left"])
         else:
@@ -263,7 +279,8 @@ class RandomForestClassifier:
         self.num_trees = num_trees
         self.max_depth = max_depth
         self.trees = [DecisionTree(max_depth) for _ in range(num_trees)]
-    
+    # In the random forest, it implements all functions by calling the funcs
+    # in decision trees.
     def fit(self, X, y):
         for tree in self.trees:
             tree.fit(X, y)
@@ -272,38 +289,81 @@ class RandomForestClassifier:
         predictions = [tree.predict(X) for tree in self.trees]
         return torch.stack(predictions, dim=0).mode(0).values
 
+def plot_3d_surface(X, y, z):
+    fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
 
+    '''
+    X = np.arange(-5, 5, 0.25)
+    Y = np.arange(-5, 5, 0.25)
+    X, Y = np.meshgrid(X, Y)
+    R = np.sqrt(X ** 2 + Y ** 2)
+    Z = np.sin(R)
+    '''
+    # Use coolwarm to plot the surface and antialiased=False to disable transparency.
+    surf = ax.plot_surface(X, y, z, cmap=cm.coolwarm,
+                           linewidth=0, antialiased=False)
 
-def evaluate_classifer(y_test, y_predictions, if_print_report, algorithm_name) :
-    # 计算准确率
+    # set the range for z axis.
+    ax.set_zlim(0, 1.01)
+    ax.zaxis.set_major_locator(LinearLocator(10))
+    # A StrMethodFormatter is used automatically
+    ax.zaxis.set_major_formatter('{x:.02f}')
+
+    # add a colorbar to indicate the meaning of color.
+    fig.colorbar(surf, shrink=0.5, aspect=5)
+    plt.show()
+    
+def evaluate_classifer(y_test, y_predictions, if_print_detailed_report) :
+    # Calculate the accuracy.
     accuracy = accuracy_score(y_test, y_predictions)
-    # 混淆矩阵
-    rf_confusion_matrix = confusion_matrix(y_test, y_predictions)
-    # 精确度、召回率和F1分数
+    # Calculate the precision, recall rate and f1 score.
     rf_precision = precision_score(y_test, y_predictions, average='weighted')
     rf_recall = recall_score(y_test, y_predictions, average='weighted')
     rf_f1 = f1_score(y_test, y_predictions, average='weighted')
-    if if_print_report :
-        # 打印评估指标
+    
+    if if_print_detailed_report :
+        # Generate the confusion matrix.
+        rf_confusion_matrix = confusion_matrix(y_test, y_predictions)
+        # Print the report if necessary.
         print("Accuracy:", accuracy)
-        print(f"{algorithm_name} Confusion Matrix:\n{rf_confusion_matrix}")
-        print(f"{algorithm_name} Precision: {rf_precision}")
-        print(f"{algorithm_name} Recall: {rf_recall}")
-        print(f"{algorithm_name} F1 Score: {rf_f1}")
-        # 分类报告
-        print(f"{algorithm_name} Classifier Report:")
+        print(f"Random Forest Confusion Matrix:\n{rf_confusion_matrix}")
+        print(f"Random Forest Precision: {rf_precision}")
+        print(f"Random Forest Recall: {rf_recall}")
+        print(f"Random Forest F1 Score: {rf_f1}")
+        # Print the classifer analysis if necessary.
+        print("Random Forest Classifier Report:")
         print(classification_report(y_test, y_predictions))
     return accuracy, rf_precision, rf_recall, rf_f1
 
-# 定义交叉验证策略
-skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-# 对于随机森林和SVM，使用交叉验证计算准确度
-#rf_cv_accuracy = cross_val_score(rf_classifier, encoded_features, y, cv=skf, scoring='accuracy')
-#svm_cv_accuracy = cross_val_score(svm_classifier, encoded_features, y, cv=skf, scoring='accuracy')
+def create_train_evaluate_RF(x, y) :
+    print(f"create_train_evaluate_RF with numbers_of_tree = {x} and depth = {y}")
+    random_forest = RandomForestClassifier(x, y)
+    random_forest.fit(X_train, y_train)
+    predictions = random_forest.predict(X_test)
+    accuracy, precision, recall, f1 =  evaluate_classifer(
+        y_test, predictions, False)
+    print(f"evaluating results: accuracy({accuracy}),precision({precision}),recall({recall}),f1({f1})")
+    return accuracy, precision, recall, f1
 
-#print(f"Random Forest CV Accuracy: {rf_cv_accuracy.mean()} (+/- {rf_cv_accuracy.std() * 2})")
-#print(f"SVM CV Accuracy: {svm_cv_accuracy.mean()} (+/- {svm_cv_accuracy.std() * 2})")
+# Exhausive tuning for different hyper parameters for Random Forest.
+def tune_hyperparameters_for_RF(
+        num_trees, max_depth, X_train, X_test, y_train, y_test) :
+    best_num_tree = num_trees
+    best_max_depth = max_depth
+    numbers_of_tree = np.arange(best_num_tree, 30, 2)
+    max_depths = np.arange(best_max_depth, 20, 1)
+    x, y = np.meshgrid(numbers_of_tree, max_depths)
+    ufunc_hyper_tuning = np.frompyfunc(create_train_evaluate_RF, 2, 4)
+    accuracy_list, rf_precision_list, rf_recall_list, rf_f1_list = ufunc_hyper_tuning(x, y)
+    plot_3d_surface(x, y, accuracy_list)
+    max_index = np.unravel_index(np.argmax(rf_f1_list), rf_f1_list.shape)
+    best_num_tree, best_max_depth = x[max_index], y[max_index]
+    print(f" best_num_tree = {best_num_tree}, best_max_depth = {best_max_depth}")
+    return best_num_tree, best_max_depth
+
+
+#-----------------------------------------
 
 def SVM_by_sklearn(X_train, y_train):
     # 创建SVM分类器实例
@@ -313,78 +373,6 @@ def SVM_by_sklearn(X_train, y_train):
     svm_classifier.fit(X_train, y_train)
 
     return svm_classifier
-
-
-if __name__=="__main__":
-    #print("main")
-    dataframe_loaded = load_data_from_files()
-    print(dataframe_loaded)
-    dataframe_loaded = data_preprocess(dataframe_loaded)
-    dataframe_scaled = feature_scaling(dataframe_loaded)
-    dataframe_meaned = mean_filter(dataframe_scaled)
-    features_list = feature_extraction(dataframe_meaned)
-    # 将特征列表转换为DataFrame
-    feature_df = pd.DataFrame(features_list)
-    feature_df.to_csv('feature_df.csv', sep=',', index=False, encoding='utf-8')
-    # DataFrame df保存为一个以制表符分隔的文本文件，不包含索引。
-    #print("====================将特征列表转换为DataFrame Done")
-    X = feature_df.iloc[:, :-1]
-    y = feature_df.iloc[:, -1]
-    
-    # 分割数据集
-    X_train_data, X_test_data, y_train_data, y_test_data = train_test_split(X, y, test_size=0.2, random_state=42)
-    print(X_train_data)
-
-
-    #------
-    # Create an SVM classifier instance
-    # Set the parameter grid that you want to tune
-    param_grid = {'C': [0.1, 1, 10], 'kernel': ['linear', 'rbf']}
-
-    # Create an SVM classifier instance
-    svm_classifier = SVC()
-
-    # Create a GridSearchCV instance
-    grid_search = GridSearchCV(svm_classifier, param_grid, cv=5)  # 5 fold cross verification
-
-
-    # Perform grid search and cross-validation
-    grid_search.fit(X_train_data, y_train_data)
-
-    # Print optimum parameter
-    print("Best parameters:", grid_search.best_params_)
-
-    # Make predictions on the test set using the best parameters
-    y_pred = grid_search.predict(X_test_data)
-
-    # # Generate and print detailed classification reports
-    # from sklearn.metrics import classification_report, accuracy_score
-    #
-    # print(classification_report(y_test_data, y_pred))
-    # print("Accuracy:", accuracy_score(y_test_data, y_pred))
-
-    evaluate_classifer(y_test_data, y_pred, True, "SVM")
-
-    X_train = torch.tensor(X_train_data.to_numpy(), dtype=torch.float32)
-    X_test = torch.tensor(X_test_data.to_numpy(), dtype=torch.float32)
-    y_train = torch.tensor(y_train_data.to_numpy(), dtype=torch.long)
-    y_test = torch.tensor(y_test_data.to_numpy(), dtype=torch.long)
-
-    # 创建并训练随机森林分类器
-    num_trees = 8
-    max_depth = 5
-    print("Create RandomForestClassifer===========")
-    random_forest = RandomForestClassifier(num_trees, max_depth)
-    print("Fit RandomForestClassifer===========")
-    random_forest.fit(X_train, y_train)
-    # 预测
-    print("RandomForestClassifer predicts()===========")
-    rf_predictions = random_forest.predict(X_test)
-    evaluate_classifer(y_test, rf_predictions, True, "RandomForest")
-
-
-#-----------------------------------------
-
 
 # 定义一个简单的线性分类器模型
 class LinearSVM(nn.Module):
@@ -446,4 +434,66 @@ def SVM_create() :
         print(f'Accuracy: {correct / len(y) * 100}%')
 
 
+if __name__=="__main__":
+    dataframe_loaded = load_data_from_files()
+    print(dataframe_loaded)
+    dataframe_loaded = data_preprocess(dataframe_loaded)
+    dataframe_scaled = feature_scaling(dataframe_loaded)
+    dataframe_meaned = mean_filter(dataframe_scaled)
+    features_list = feature_extraction(dataframe_meaned)
+    
+    # Convert the list to data frame to save in a csv file.
+    feature_df = pd.DataFrame(features_list)
+    feature_df.to_csv('feature_df.csv', sep=',', index=False, encoding='utf-8')
+    
+    # Split X from y to do data spliting.
+    X = feature_df.iloc[:, :-1]
+    y = feature_df.iloc[:, -1]
+    
+    # Data spliting
+    X_train_data, X_test_data, y_train_data, y_test_data = train_test_split(X, y, test_size=0.2, random_state=42)
 
+    # Create an SVM classifier instance
+    # Set the parameter grid that you want to tune
+    param_grid = {'C': [0.1, 1, 10], 'kernel': ['linear', 'rbf']}
+
+    # Create an SVM classifier instance
+    svm_classifier = SVC()
+
+    # Create a GridSearchCV instance
+    grid_search = GridSearchCV(svm_classifier, param_grid, cv=5)  # 5 fold cross verification
+
+    # Perform grid search and cross-validation
+    grid_search.fit(X_train_data, y_train_data)
+
+    # Print optimum parameter
+    print("Best parameters:", grid_search.best_params_)
+
+    # Make predictions on the test set using the best parameters
+    y_pred = grid_search.predict(X_test_data)
+
+    # Generate and print detailed classification reports
+    print(classification_report(y_test_data, y_pred))
+    print("Accuracy:", accuracy_score(y_test_data, y_pred))
+
+    # Convert data to tensor type.
+    X_train = torch.tensor(X_train_data.to_numpy(), dtype=torch.float32)
+    X_test = torch.tensor(X_test_data.to_numpy(), dtype=torch.float32)
+    y_train = torch.tensor(y_train_data.to_numpy(), dtype=torch.long)
+    y_test = torch.tensor(y_test_data.to_numpy(), dtype=torch.long)
+    
+    # Create and train a Random Forest.
+    # Make an initiall guess for number of trees and maximum depth.
+    num_trees = 5
+    max_depth = 5
+    best_num_tree, best_max_depth = tune_hyperparameters_for_RF(
+        num_trees, max_depth, X_train, X_test, y_train, y_test)
+    #best_num_tree = num_trees
+    #best_max_depth = max_depth
+    print("Create RandomForestClassifer===========")
+    random_forest = RandomForestClassifier(best_num_tree, best_max_depth)
+    print("Fit RandomForestClassifer===========")
+    random_forest.fit(X_train, y_train)
+    print("RandomForestClassifer predicts()===========")
+    rf_predictions = random_forest.predict(X_test)
+    evaluate_classifer(y_test, rf_predictions, True)
