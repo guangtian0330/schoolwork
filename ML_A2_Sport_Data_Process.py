@@ -37,8 +37,8 @@ dataframe_loaded = pd.DataFrame()
 
 # Define the size of window and stepsize. 
 # The step size is smaller than window size indicating that windows have overlaps
-window_size = 100
-step_size = 50
+window_size = 10
+step_size = 9
 
 '''
 load files for a referred motion and return a dataframe.
@@ -115,12 +115,12 @@ def data_preprocess(dataframe_loaded):
         print(">>>>>>>>>>>LEAVE  data_process ==============")
         return dataframe_loaded
 
-def add_noise() :
-    noise_level = 0.01  # 噪声水平可以根据需要调整
-    for df_key, df in dataframe_loaded.items():
-        for col in df.columns:
-            if col not in ['motion', 'sensor']:  # 仅对数值特征添加噪声
-                df[col] = df[col] + np.random.normal(0, noise_level, size=df[col].shape)
+def add_noise(dataframe_loaded) :
+    noise_level = 0.1
+    for col in dataframe_loaded.columns:
+        if col != 'motion':
+            dataframe_loaded[col] = dataframe_loaded[col] + np.random.normal(0, noise_level, size=dataframe_loaded[col].shape)
+    return dataframe_loaded
 
 def mean_filter(dataframe_loaded):
     print("==========ENTER  mean_filter <<<<<<<<<<<")
@@ -201,10 +201,12 @@ class DecisionTree(nn.Module):
         # If the tress reaches its maximun depth, then just return the
         # the majority of results. 
         if depth >= self.max_depth:
+            #print("depth >= self.max_depth")
             # Return the dictionary variable type, to be compatible with the tree.
             return {"class": torch.bincount(y).argmax()}
         # If there's only one leaf, then just return it.
         if len(torch.unique(y)) == 1:
+            #print("len(torch.unique(y)) == 1:")
             return {"class": y[0]}
 
         num_samples, num_features = X.shape
@@ -292,13 +294,6 @@ class RandomForestClassifier:
 def plot_3d_surface(X, y, z):
     fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
 
-    '''
-    X = np.arange(-5, 5, 0.25)
-    Y = np.arange(-5, 5, 0.25)
-    X, Y = np.meshgrid(X, Y)
-    R = np.sqrt(X ** 2 + Y ** 2)
-    Z = np.sin(R)
-    '''
     # Use coolwarm to plot the surface and antialiased=False to disable transparency.
     surf = ax.plot_surface(X, y, z, cmap=cm.coolwarm,
                            linewidth=0, antialiased=False)
@@ -351,8 +346,8 @@ def tune_hyperparameters_for_RF(
         num_trees, max_depth, X_train, X_test, y_train, y_test) :
     best_num_tree = num_trees
     best_max_depth = max_depth
-    numbers_of_tree = np.arange(best_num_tree, 30, 2)
-    max_depths = np.arange(best_max_depth, 20, 1)
+    numbers_of_tree = np.arange(best_num_tree, 10, 2)
+    max_depths = np.arange(best_max_depth, 10, 2)
     x, y = np.meshgrid(numbers_of_tree, max_depths)
     ufunc_hyper_tuning = np.frompyfunc(create_train_evaluate_RF, 2, 4)
     accuracy_list, rf_precision_list, rf_recall_list, rf_f1_list = ufunc_hyper_tuning(x, y)
@@ -414,8 +409,6 @@ def SVM_create() :
     criterion = MultiClassHingeLoss()
     optimizer = SGD(model.parameters(), lr=0.01)
     
-    
-    
     # 训练模型
     for epoch in range(20):  # 训练20个epoch
         optimizer.zero_grad()  # 清除之前的梯度
@@ -440,7 +433,8 @@ if __name__=="__main__":
     dataframe_loaded = data_preprocess(dataframe_loaded)
     dataframe_scaled = feature_scaling(dataframe_loaded)
     dataframe_meaned = mean_filter(dataframe_scaled)
-    features_list = feature_extraction(dataframe_meaned)
+    dataframe_noised = add_noise(dataframe_meaned)
+    features_list = feature_extraction(dataframe_noised)
     
     # Convert the list to data frame to save in a csv file.
     feature_df = pd.DataFrame(features_list)
@@ -451,7 +445,7 @@ if __name__=="__main__":
     y = feature_df.iloc[:, -1]
     
     # Data spliting
-    X_train_data, X_test_data, y_train_data, y_test_data = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train_data, X_test_data, y_train_data, y_test_data = train_test_split(X, y, test_size=0.4, random_state=42)
 
     # Create an SVM classifier instance
     # Set the parameter grid that you want to tune
@@ -475,6 +469,7 @@ if __name__=="__main__":
     # Generate and print detailed classification reports
     print(classification_report(y_test_data, y_pred))
     print("Accuracy:", accuracy_score(y_test_data, y_pred))
+    print("====================")
 
     # Convert data to tensor type.
     X_train = torch.tensor(X_train_data.to_numpy(), dtype=torch.float32)
@@ -485,15 +480,45 @@ if __name__=="__main__":
     # Create and train a Random Forest.
     # Make an initiall guess for number of trees and maximum depth.
     num_trees = 5
-    max_depth = 5
-    best_num_tree, best_max_depth = tune_hyperparameters_for_RF(
-        num_trees, max_depth, X_train, X_test, y_train, y_test)
-    #best_num_tree = num_trees
-    #best_max_depth = max_depth
-    print("Create RandomForestClassifer===========")
+    max_depth = 30
+    best_num_tree = num_trees
+    best_max_depth = max_depth
+    #best_num_tree, best_max_depth = tune_hyperparameters_for_RF(
+    #    num_trees, max_depth, X_train, X_test, y_train, y_test)
+
+    print("1 Create RandomForestClassifer===========")
     random_forest = RandomForestClassifier(best_num_tree, best_max_depth)
-    print("Fit RandomForestClassifer===========")
+    print("1 Fit RandomForestClassifer===========")
     random_forest.fit(X_train, y_train)
-    print("RandomForestClassifer predicts()===========")
+    print("1 RandomForestClassifer predicts()===========")
     rf_predictions = random_forest.predict(X_test)
     evaluate_classifer(y_test, rf_predictions, True)
+    print(y_train)
+    print("===========")
+    print(y_test)
+    print("===========")
+    print(rf_predictions)
+    
+    random_forest = RandomForestClassifier(best_num_tree * 2, best_max_depth)
+    print("2 Fit RandomForestClassifer===========")
+    random_forest.fit(X_train, y_train)
+    print("2 RandomForestClassifer predicts()===========")
+    rf_predictions = random_forest.predict(X_test)
+    evaluate_classifer(y_test, rf_predictions, True)
+    print(y_train)
+    print("===========")
+    print(y_test)
+    print("===========")
+    print(rf_predictions)
+    
+    random_forest = RandomForestClassifier(best_num_tree * 4, best_max_depth)
+    print("3 Fit RandomForestClassifer===========")
+    random_forest.fit(X_train, y_train)
+    print("3 RandomForestClassifer predicts()===========")
+    rf_predictions = random_forest.predict(X_test)
+    evaluate_classifer(y_test, rf_predictions, True)
+    print(y_train)
+    print("===========")
+    print(y_test)
+    print("===========")
+    print(rf_predictions)
