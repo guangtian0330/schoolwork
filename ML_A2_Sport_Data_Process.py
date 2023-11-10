@@ -325,7 +325,7 @@ def evaluate_classifer(y_test, y_predictions, if_print_detailed_report, algorith
         # Generate the confusion matrix.
         rf_confusion_matrix = confusion_matrix(y_test, y_predictions)
         # Print the report if necessary.
-        print("Accuracy:", accuracy)
+        print(f"{algorithm}Accuracy:", accuracy)
         print(f"{algorithm} Confusion Matrix:\n{rf_confusion_matrix}")
         print(f"{algorithm} Precision: {rf_precision}")
         print(f"{algorithm} Recall: {rf_recall}")
@@ -406,7 +406,6 @@ if __name__=="__main__":
 
     # Generate and print detailed classification reports
     print(classification_report(y_test_data, y_pred))
-    print("Accuracy:", accuracy_score(y_test_data, y_pred))
     evaluate_classifer(y_test_data, y_pred, True, "SVM")
     # Convert data to tensor type.
     X_train = torch.tensor(X_train_data.to_numpy(), dtype=torch.float32)
@@ -416,8 +415,8 @@ if __name__=="__main__":
     
     # Create and train a Random Forest.
     # Make an initiall guess for number of trees and maximum depth.
-    num_trees = 5
-    max_depth = 5
+    num_trees = 10
+    max_depth = 30
     best_num_tree, best_max_depth = tune_hyperparameters_for_RF(
         num_trees, max_depth, X_train, X_test, y_train, y_test)
     #best_num_tree = num_trees
