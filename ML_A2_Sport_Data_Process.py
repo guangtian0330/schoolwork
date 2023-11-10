@@ -308,7 +308,7 @@ def plot_3d_surface(X, y, z):
     fig.colorbar(surf, shrink=0.5, aspect=5)
     plt.show()
     
-def evaluate_classifer(y_test, y_predictions, if_print_detailed_report) :
+def evaluate_classifer(y_test, y_predictions, if_print_detailed_report, algorithm) :
     # Calculate the accuracy.
     accuracy = accuracy_score(y_test, y_predictions)
     # Calculate the precision, recall rate and f1 score.
@@ -320,13 +320,13 @@ def evaluate_classifer(y_test, y_predictions, if_print_detailed_report) :
         # Generate the confusion matrix.
         rf_confusion_matrix = confusion_matrix(y_test, y_predictions)
         # Print the report if necessary.
-        print("Accuracy:", accuracy)
-        print(f"Random Forest Confusion Matrix:\n{rf_confusion_matrix}")
-        print(f"Random Forest Precision: {rf_precision}")
-        print(f"Random Forest Recall: {rf_recall}")
-        print(f"Random Forest F1 Score: {rf_f1}")
+        print(f"{algorithm}Accuracy:", accuracy)
+        print(f"{algorithm} Confusion Matrix:\n{rf_confusion_matrix}")
+        print(f"{algorithm} Precision: {rf_precision}")
+        print(f"{algorithm} Recall: {rf_recall}")
+        print(f"{algorithm} F1 Score: {rf_f1}")
         # Print the classifer analysis if necessary.
-        print("Random Forest Classifier Report:")
+        print(f"{algorithm} Classifier Report:")
         print(classification_report(y_test, y_predictions))
     return accuracy, rf_precision, rf_recall, rf_f1
 
@@ -357,8 +357,6 @@ def tune_hyperparameters_for_RF(
     print(f" best_num_tree = {best_num_tree}, best_max_depth = {best_max_depth}")
     return best_num_tree, best_max_depth
 
-
-#-----------------------------------------
 
 def SVM_by_sklearn(X_train, y_train):
     # 创建SVM分类器实例
@@ -450,27 +448,20 @@ if __name__=="__main__":
     # Create an SVM classifier instance
     # Set the parameter grid that you want to tune
     param_grid = {'C': [0.1, 1, 10], 'kernel': ['linear', 'rbf']}
-
     # Create an SVM classifier instance
     svm_classifier = SVC()
-
     # Create a GridSearchCV instance
     grid_search = GridSearchCV(svm_classifier, param_grid, cv=5)  # 5 fold cross verification
-
     # Perform grid search and cross-validation
     grid_search.fit(X_train_data, y_train_data)
-
     # Print optimum parameter
     print("Best parameters:", grid_search.best_params_)
-
     # Make predictions on the test set using the best parameters
     y_pred = grid_search.predict(X_test_data)
 
     # Generate and print detailed classification reports
-    print(classification_report(y_test_data, y_pred))
-    print("Accuracy:", accuracy_score(y_test_data, y_pred))
-    print("====================")
 
+    evaluate_classifer(y_test_data, y_pred, True, "SVM")
     # Convert data to tensor type.
     X_train = torch.tensor(X_train_data.to_numpy(), dtype=torch.float32)
     X_test = torch.tensor(X_test_data.to_numpy(), dtype=torch.float32)
@@ -487,6 +478,7 @@ if __name__=="__main__":
     #    num_trees, max_depth, X_train, X_test, y_train, y_test)
 
     print("1 Create RandomForestClassifer===========")
+
     random_forest = RandomForestClassifier(best_num_tree, best_max_depth)
     print("1 Fit RandomForestClassifer===========")
     random_forest.fit(X_train, y_train)
