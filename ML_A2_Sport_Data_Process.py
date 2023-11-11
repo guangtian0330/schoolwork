@@ -4,16 +4,11 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.impute import SimpleImputer
 from scipy.stats import skew, kurtosis
-from sklearn.metrics import accuracy_score
-from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, classification_report
 from sklearn.svm import SVC
-from sklearn.utils.validation import column_or_1d
-from sklearn.metrics import accuracy_score
 
 import torch
 import torch.nn as nn
-import torch.optim as optim
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
@@ -45,13 +40,7 @@ load files for a referred motion and return a dataframe.
 'time' and 'seconds_elapsed' are removed after data is loaded.
 They are dropped because:
 It doesn't involve any predictive information.
-不携带预测性信息：如果时间戳本身与目标变量（在您的案例中是运动类型）无关，则它们不会为模型提供任何有价值的信息。比如，如果运动类型不随时间变化而变化，那么时间特征可能对模型预测不会有帮助。
-数据泄露：如果时间相关的特征与数据收集的方式有关，而不是与预测目标本身有关，那么它们可能会导致数据泄露，使模型过度拟合训练集中的“时间”模式，而这些模式在未来的数据中可能并不适用。
-模型复杂性：保留不相关或不重要的特征会增加模型的复杂性，可能导致模型训练时间更长，而且如果特征过多还可能导致维度灾难。
-时间序列问题：如果数据是时间序列数据，'time' 和 'seconds_elapsed' 可能需要以不同的方式处理，如通过时间序列分析而不是标准的机器学习模型。对于这种数据，通常会使用特殊的时间序列模型或将时间信息转换为其他更有用的特征。
-在一些情况下，时间特征可以经过适当的工程转换为模型可用的形式。例如，如果您知道某些运动类型在一天中的特定时间更有可能发生，您可以将时间戳转换为一天中的小时来捕获这种周期性。或者，如果您有理由相信运动类型会随着时间推移而发生变化（例如，在长时间的数据收集期间），那么时间也可能成为一个重要特征。
 '''
-
 def loadFileForMotion(motion) :
     filenames = [f"{motion}{sensor}.csv" for sensor in sensors]
     #print(filenames)
@@ -358,66 +347,55 @@ def tune_hyperparameters_for_RF(
     return best_num_tree, best_max_depth
 
 
-def SVM_by_sklearn(X_train, y_train):
-    # 创建SVM分类器实例
-    svm_classifier = SVC(kernel='linear')  # 你可以选择不同的核函数
 
-    # 训练模型
-    svm_classifier.fit(X_train, y_train)
-
-    return svm_classifier
-
-# 定义一个简单的线性分类器模型
+# Define a simple linear classifier model
 class LinearSVM(nn.Module):
     def __init__(self):
         super(LinearSVM, self).__init__()
-        # 这里的10是输入特征的数量，3是类别的数量
         self.linear = nn.Linear(36, 3)
 
     def forward(self, x):
         return self.linear(x)
 
 
-# 确定多分类Hinge损失
+# Determine multi-class Hinge losses
 class MultiClassHingeLoss(nn.Module):
     def __init__(self):
         super(MultiClassHingeLoss, self).__init__()
 
     def forward(self, output, target):
-        """
-        output (batch_size, n_classes): 模型输出
-        target (batch_size): 实际类别的索引
-        """
-        # 确定每个样本的正确分类的得分
+
+        # Determine the correct classification score for each sample
         correct_class_scores = output[torch.arange(0, output.size(0)).long(), target].view(-1, 1)
 
-        # 比较正确分类得分与其他分类得分的差距，并计算损失
+        # Compare the difference between the correct classification score
+        # and the other classification score, and calculate the loss
         margin = 1.0
         loss = output - correct_class_scores + margin
-        # 确保正确的分类不参与损失计算
+        # Ensure that correct classification is not involved in loss calculations
         loss[torch.arange(0, output.size(0)).long(), target] = 0
-        # 只取正的部分，相当于max(0, .)
+        # Take only the positive part, equivalent to max(0,.)
         loss = torch.sum(torch.clamp(loss, min=0))
         return loss
 
 
-def SVM_create() :
-    # 初始化模型、损失函数和优化器
+def SVM_based_create() :
+    # Initialize the model, loss function, and optimizer
     model = LinearSVM()
     criterion = MultiClassHingeLoss()
     optimizer = SGD(model.parameters(), lr=0.01)
-    
-    # 训练模型
-    for epoch in range(20):  # 训练20个epoch
-        optimizer.zero_grad()  # 清除之前的梯度
-        output = model(X_train)  # 前向传播
-        loss = criterion(output, y_train)  # 计算损失
-        loss.backward()  # 反向传播
-        optimizer.step()  # 更新权重
+
+    # Training model
+    for epoch in range(20):  # Train 20 Epochs
+        optimizer.zero_grad()  #  Clear previous gradients
+        output = model(X_train)  # Forward propagation
+        loss = criterion(output, y_train)  # Calculated loss
+        loss.backward()  # backpropagation
+        optimizer.step()  # Update weight
     
         print(f'Epoch {epoch + 1}, Loss: {loss.item()}')
     
-    # 模型评估
+    # model evaluation
     with torch.no_grad():
         output = model(X_test)
         _, predicted = torch.max(output, 1)
@@ -445,7 +423,7 @@ if __name__=="__main__":
     # Data spliting
     X_train_data, X_test_data, y_train_data, y_test_data = train_test_split(X, y, test_size=0.4, random_state=42)
 
-    # Create an SVM classifier instance
+    # Create an SVM classifier instance based on sklearn
     # Set the parameter grid that you want to tune
     param_grid = {'C': [0.1, 1, 10], 'kernel': ['linear', 'rbf']}
     # Create an SVM classifier instance
@@ -455,19 +433,22 @@ if __name__=="__main__":
     # Perform grid search and cross-validation
     grid_search.fit(X_train_data, y_train_data)
     # Print optimum parameter
-    print("Best parameters:", grid_search.best_params_)
+    print("SVM Best parameters:", grid_search.best_params_)
     # Make predictions on the test set using the best parameters
     y_pred = grid_search.predict(X_test_data)
-
     # Generate and print detailed classification reports
-
     evaluate_classifer(y_test_data, y_pred, True, "SVM")
+
     # Convert data to tensor type.
     X_train = torch.tensor(X_train_data.to_numpy(), dtype=torch.float32)
     X_test = torch.tensor(X_test_data.to_numpy(), dtype=torch.float32)
     y_train = torch.tensor(y_train_data.to_numpy(), dtype=torch.long)
     y_test = torch.tensor(y_test_data.to_numpy(), dtype=torch.long)
-    
+
+
+
+
+
     # Create and train a Random Forest.
     # Make an initiall guess for number of trees and maximum depth.
     num_trees = 5
@@ -484,7 +465,7 @@ if __name__=="__main__":
     random_forest.fit(X_train, y_train)
     print("1 RandomForestClassifer predicts()===========")
     rf_predictions = random_forest.predict(X_test)
-    evaluate_classifer(y_test, rf_predictions, True)
+    evaluate_classifer(y_test, rf_predictions, True, "random_forest")
     print(y_train)
     print("===========")
     print(y_test)
@@ -496,7 +477,7 @@ if __name__=="__main__":
     random_forest.fit(X_train, y_train)
     print("2 RandomForestClassifer predicts()===========")
     rf_predictions = random_forest.predict(X_test)
-    evaluate_classifer(y_test, rf_predictions, True)
+    evaluate_classifer(y_test, rf_predictions, True, "random_forest")
     print(y_train)
     print("===========")
     print(y_test)
@@ -508,7 +489,7 @@ if __name__=="__main__":
     random_forest.fit(X_train, y_train)
     print("3 RandomForestClassifer predicts()===========")
     rf_predictions = random_forest.predict(X_test)
-    evaluate_classifer(y_test, rf_predictions, True)
+    evaluate_classifer(y_test, rf_predictions, True, "random_forest")
     print(y_train)
     print("===========")
     print(y_test)
