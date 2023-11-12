@@ -12,6 +12,7 @@ import torch.nn as nn
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+from torch import optim
 from torch.optim import SGD
 
 import matplotlib.pyplot as plt
@@ -348,59 +349,32 @@ def tune_hyperparameters_for_RF(
 
 
 
-# Define a simple linear classifier model
+
 class LinearSVM(nn.Module):
     def __init__(self):
         super(LinearSVM, self).__init__()
-        self.linear = nn.Linear(36, 3)
+        self.fc = nn.Linear(54, 1)
 
     def forward(self, x):
-        return self.linear(x)
+        return self.fc(x)
 
 
-# Determine multi-class Hinge losses
-class MultiClassHingeLoss(nn.Module):
-    def __init__(self):
-        super(MultiClassHingeLoss, self).__init__()
-
-    def forward(self, output, target):
-
-        # Determine the correct classification score for each sample
-        correct_class_scores = output[torch.arange(0, output.size(0)).long(), target].view(-1, 1)
-
-        # Compare the difference between the correct classification score
-        # and the other classification score, and calculate the loss
-        margin = 1.0
-        loss = output - correct_class_scores + margin
-        # Ensure that correct classification is not involved in loss calculations
-        loss[torch.arange(0, output.size(0)).long(), target] = 0
-        # Take only the positive part, equivalent to max(0,.)
-        loss = torch.sum(torch.clamp(loss, min=0))
-        return loss
+criterion = nn.HingeEmbeddingLoss()
 
 
-def SVM_based_create() :
-    # Initialize the model, loss function, and optimizer
-    model = LinearSVM()
-    criterion = MultiClassHingeLoss()
-    optimizer = SGD(model.parameters(), lr=0.01)
+def evaluate_model(model, X, Y):
+    model.eval()
 
-    # Training model
-    for epoch in range(20):  # Train 20 Epochs
-        optimizer.zero_grad()  #  Clear previous gradients
-        output = model(X_train)  # Forward propagation
-        loss = criterion(output, y_train)  # Calculated loss
-        loss.backward()  # backpropagation
-        optimizer.step()  # Update weight
-    
-        print(f'Epoch {epoch + 1}, Loss: {loss.item()}')
-    
-    # model evaluation
     with torch.no_grad():
-        output = model(X_test)
-        _, predicted = torch.max(output, 1)
-        correct = (predicted == y_test).sum().item()
-        print(f'Accuracy: {correct / len(y) * 100}%')
+        outputs = model(X)
+        _, predicted = torch.max(outputs, 1)
+
+        # 计算准确率
+        total = Y.size(0)
+        correct = (predicted == Y).sum().item()
+        accuracy = correct / total
+
+    return accuracy
 
 
 if __name__=="__main__":
@@ -419,9 +393,9 @@ if __name__=="__main__":
     # Split X from y to do data spliting.
     X = feature_df.iloc[:, :-1]
     y = feature_df.iloc[:, -1]
-    
-    # Data spliting
+
     X_train_data, X_test_data, y_train_data, y_test_data = train_test_split(X, y, test_size=0.4, random_state=42)
+
 
     # Create an SVM classifier instance based on sklearn
     # Set the parameter grid that you want to tune
@@ -447,10 +421,27 @@ if __name__=="__main__":
 
 
 
+    #-- torch SVM-----
+    # Train an SVM for each class
+    models = [LinearSVM() for _ in range(3)]
+    optimizers = [optim.SGD(model.parameters(), lr=0.1) for model in models]
+    for i, model in enumerate(models):
+        for epoch in range(1000):
+            optimizers[i].zero_grad()
+            output = model(X_train).squeeze()
+            target = torch.where(y_train == i, 1, -1).float()  # The current category is 1 and others are -1
+            loss = criterion(output, target)
+            loss.backward()
+            optimizers[i].step()
+
+        y_pre = model(X_test)
+        accuracy = evaluate_model(model, X_test, y_test)
+        print(f'Accuracy: {accuracy * 100:.2f}%')
 
 
-    # Create and train a Random Forest.
-    # Make an initiall guess for number of trees and maximum depth.
+
+    #Create and train a Random Forest.
+    #Make an initiall guess for number of trees and maximum depth.
     num_trees = 5
     max_depth = 30
     best_num_tree = num_trees
@@ -471,7 +462,7 @@ if __name__=="__main__":
     print(y_test)
     print("===========")
     print(rf_predictions)
-    
+
     random_forest = RandomForestClassifier(best_num_tree * 2, best_max_depth)
     print("2 Fit RandomForestClassifer===========")
     random_forest.fit(X_train, y_train)
@@ -483,7 +474,7 @@ if __name__=="__main__":
     print(y_test)
     print("===========")
     print(rf_predictions)
-    
+
     random_forest = RandomForestClassifier(best_num_tree * 4, best_max_depth)
     print("3 Fit RandomForestClassifer===========")
     random_forest.fit(X_train, y_train)
