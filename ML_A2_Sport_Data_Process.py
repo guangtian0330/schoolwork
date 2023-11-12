@@ -70,8 +70,8 @@ def load_data_from_files() :
 def data_preprocess(dataframe_loaded):
     print("==========ENTER  data_process <<<<<<<<<<<")
     if not dataframe_loaded.empty:
-        #for df in dataframe_loaded.items():
-        #original_nan_count = dataframe_loaded.isna().sum().sum()
+        # For df in dataframe_loaded.items():
+        # original_nan_count = dataframe_loaded.isna().sum().sum()
         dataframe_loaded.drop_duplicates(inplace=True)
         dataframe_loaded.replace([np.inf, -np.inf], np.nan, inplace=True)
         dataframe_loaded.ffill(inplace=True)
@@ -196,7 +196,6 @@ class DecisionTree(nn.Module):
             return {"class": torch.bincount(y).argmax()}
         # If there's only one leaf, then just return it.
         if len(torch.unique(y)) == 1:
-            #print("len(torch.unique(y)) == 1:")
             return {"class": y[0]}
 
         num_samples, num_features = X.shape
@@ -369,7 +368,7 @@ def evaluate_model(model, X, Y):
         outputs = model(X)
         _, predicted = torch.max(outputs, 1)
 
-        # 计算准确率
+        # Calculate the accuracy.
         total = Y.size(0)
         correct = (predicted == Y).sum().item()
         accuracy = correct / total
