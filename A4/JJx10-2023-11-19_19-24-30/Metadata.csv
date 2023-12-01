@@ -1,0 +1,2 @@
+version,device name,recording epoch time,recording time,recording timezone,platform,appVersion,device id,sensors,sampleRateMs
+3,M2102J20SG,1700421870017,2023-11-19_19-24-30,America/Toronto,android,1.25.1,1b41dcc6-5daf-4176-b6a9-76ec6f76b7a7,Accelerometer|Orientation|Annotation|TotalAcceleration,10|10||10
