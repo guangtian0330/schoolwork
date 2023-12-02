@@ -18,6 +18,9 @@ from scipy.stats import skew, kurtosis
 from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, classification_report
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import MinMaxScaler
+import torchvision
+import torchvision.transforms as transforms
+import numpy as np
 import matplotlib.pyplot as plt
 
 # Define the name list of motions and sensors.
@@ -179,6 +182,64 @@ sequential sensor data classification.
 TBD by Sisong
 """
 
+class CNN(nn.Module):
+    def __init__(self):
+        super(CNN, self).__init__()
+        # Define the architecture of the neural network
+        # Convolutional Layer 1: Input channels=3 (RGB), Output channels=32, Kernel size=3x3, Padding=1
+        # The neural network learns these weights through backpropagation during training
+        self.conv1 = nn.Conv1d(54, 32, 3, padding=1)
+        # Convolutional Layer 2: Input channels=32, Output channels=64, Kernel size=3x3, Padding=1
+        self.conv2 = nn.Conv1d(32, 64, 3, padding=1)
+        # Max Pooling Layer: Kernel size=2x2, Stride=2 (pooling window moves horizontally and vertically after each operation)
+        self.pool = nn.MaxPool2d(2, 2) # now the image is 8x8
+        # Fully Connected Layer 1: Input features=64*8*8 (output channels * output image size), Output features=128
+        self.fc1 = nn.Linear(64 * 8 * 8, 128)
+        # Fully Connected Layer 2 (Output Layer): Input features=128, Output features=10 (number of classes)
+        self.fc2 = nn.Linear(128, 10)
+
+    def forward(self, x):
+        # Forward pass through the network
+        # Convolutional Layer 1 followed by ReLU activation and max pooling
+        x= self.conv1(x)
+        x = self.pool(torch.relu(x))
+        # Convolutional Layer 2 followed by ReLU activation and max pooling
+        x = self.pool(torch.relu(self.conv2(x)))
+        # Reshape the tensor for the fully connected layers
+        x = x.view(-1, 64 * 8 * 8)
+        # Fully Connected Layer 1 followed by ReLU activation
+        x = torch.relu(self.fc1(x))
+        # Fully Connected Layer 2 (Output Layer)
+        x = self.fc2(x)
+
+        return x
+
+def train_cnn_model(model, input_seq, target_seq, criterion, optimizer, epochs=500) :
+  # input_seq = input_seq.unsqueeze(1)
+  input_seq = torch.transpose(input_seq, 0, 1)
+
+  print(f"input_seq shape = {input_seq.shape}")
+  for epoch in range(epochs):
+      # Reset the gradient to zero in case of accumulation.
+      optimizer.zero_grad()
+      # Forward propogation
+      output = model(input_seq)
+      # Calculate the loss using criterion.
+      loss = criterion(output, target_seq)
+      # Calculate the backpropogation
+      loss.backward()
+      # Update the weightes based on the gradients.
+      optimizer.step()
+      # Print the debugging information for loss function
+      if epoch % 20 == 0:
+          print(f'Epoch [{epoch+1}/{epochs}], Loss: {loss.item():.4f}')
+# Predicting
+def cnn_predict(model, inputs):
+    with torch.no_grad():
+        outputs = model(inputs)
+        _, predicted_labels = torch.max(outputs, 1)
+    return predicted_labels
+
 
 """
 Develop and train GRU (Gated Recurrent Unit) networks for sequential sensor
@@ -276,6 +337,28 @@ if __name__ == '__main__':
     X_test = torch.tensor(X_test_data.to_numpy(), dtype=torch.float32)
     y_train = torch.tensor(y_train_data.to_numpy(), dtype=torch.long)
     y_test = torch.tensor(y_test_data.to_numpy(), dtype=torch.long)
+
+    #-----------CNN-------------------
+
+    net = CNN()
+
+    # Define the loss function (Cross Entropy Loss for classification problems)
+    criterion = nn.CrossEntropyLoss()
+    # Define the optimizer (Stochastic Gradient Descent with momentum)
+    optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
+
+    # Load and preprocess the CIFAR-10 dataset
+    # a normalized PyTorch tensor that can be passed as input
+    # torchvision.transforms.Normalize(mean, std, inplace=False)
+    # Suppose you have a pixel value of (100, 150, 200) for a particular pixel in an image.
+    # After applying this normalization, the pixel values would be transformed as follows:
+    # Red channel: (100 - 0.5) / 0.5 = 199
+    # Green channel: (150 - 0.5) / 0.5 = 299
+    # Blue channel: (200 - 0.5) / 0.5 = 399
+    # train_cnn_model(net, X_train, y_train, criterion, optimizer)
+
+
+    #---------------------------------------------------------------------------
     
     output_size = 3
     hidden_size = 64
