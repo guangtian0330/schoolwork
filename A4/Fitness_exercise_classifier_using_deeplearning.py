@@ -182,37 +182,86 @@ sequential sensor data classification.
 """
 
 class CNN(nn.Module):
-    def __init__(self):
+    def __init__(self, conv_num=2, kernel_size=3):
         super(CNN, self).__init__()
-        # The first convolution layer has input channel 1 (univariate time series) and output channel 16
-        self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=3, padding=1)
-        # Second convolution layer with input channel 16 and output channel 32
-        self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=3, padding=1)
-        # pooling layer
-        self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
-        self.fc1 = nn.Linear(in_features=416, out_features=10)
-        # Output layer, there are 3 outputs corresponding to 3 categories
-        self.fc2 = nn.Linear(in_features=10, out_features=3)
+        self.conv_num = conv_num
+        if conv_num == 2:
+            self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=kernel_size, padding=1)
+            self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=kernel_size, padding=1)
+            # pooling layer
+            self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
+            self.fc1 = nn.Linear(in_features=416, out_features=10)
+            self.fc2 = nn.Linear(in_features=10, out_features=3)
+        elif conv_num == 3:
+            self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=kernel_size, padding=1)
+            self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=kernel_size, padding=1)
+            self.conv3 = nn.Conv1d(in_channels=32, out_channels=32, kernel_size=kernel_size, padding=1)
+            # pooling layer
+            self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
+            self.fc1 = nn.Linear(in_features=192, out_features=10)
+            self.fc2 = nn.Linear(in_features=10, out_features=3)
+        elif conv_num == 4:
+            self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=kernel_size, padding=1)
+            self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=kernel_size, padding=1)
+            self.conv3 = nn.Conv1d(in_channels=32, out_channels=32, kernel_size=kernel_size, padding=1)
+            self.conv4 = nn.Conv1d(in_channels=32, out_channels=32, kernel_size=kernel_size, padding=1)
+            # pooling layer
+            self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
+            self.fc1 = nn.Linear(in_features=96, out_features=10)
+            self.fc2 = nn.Linear(in_features=10, out_features=3)
 
     def forward(self, x):
-        # Apply convolution layer and ReLU activation function
-        x = torch.relu(self.conv1(x))
-        # pooling layer
-        x = self.pool(x)
-        x = torch.relu(self.conv2(x))
-        x = self.pool(x)
-        # Flattening features to input into the fully connected layer
-        x = x.view(x.size(0), -1)
-        x = torch.relu(self.fc1(x))
-        # Application output layer
-        x = self.fc2(x)
+        if self.conv_num == 2:
+            # Apply convolution layer and ReLU activation function
+            x = torch.relu(self.conv1(x))
+            # pooling layer
+            x = self.pool(x)
+            x = torch.relu(self.conv2(x))
+            x = self.pool(x)
+            # Flattening features to input into the fully connected layer
+            x = x.view(x.size(0), -1)
+            x = torch.relu(self.fc1(x))
+            # Application output layer
+            x = self.fc2(x)
+        elif self.conv_num == 3:
+            # Apply convolution layer and ReLU activation function
+            x = torch.relu(self.conv1(x))
+            # pooling layer
+            x = self.pool(x)
+            x = torch.relu(self.conv2(x))
+            x = self.pool(x)
+            x = torch.relu(self.conv3(x))
+            x = self.pool(x)
+            # Flattening features to input into the fully connected layer
+            x = x.view(x.size(0), -1)
+            x = torch.relu(self.fc1(x))
+            # Application output layer
+            x = self.fc2(x)
+        elif self.conv_num == 4:
+            # Apply convolution layer and ReLU activation function
+            x = torch.relu(self.conv1(x))
+            # pooling layer
+            x = self.pool(x)
+            x = torch.relu(self.conv2(x))
+            x = self.pool(x)
+            x = torch.relu(self.conv3(x))
+            x = self.pool(x)
+            x = torch.relu(self.conv4(x))
+            x = self.pool(x)
+            # Flattening features to input into the fully connected layer
+            x = x.view(x.size(0), -1)
+            x = torch.relu(self.fc1(x))
+            # Application output layer
+            x = self.fc2(x)
         return x
 
 def train_cnn_model(model, input_seq, target_seq, criterion, optimizer, epochs=500) :
     input_seq = input_seq.unsqueeze(1)
     model.train()
+    loss_result = []
     batch_size = 10
     for epoch in range(100):
+        total_loss = 0.0
         for i in range(0, len(X_train), batch_size):
             # Get batch data
             inputs = input_seq[i:i + batch_size]
@@ -230,9 +279,11 @@ def train_cnn_model(model, input_seq, target_seq, criterion, optimizer, epochs=5
             # Backpropagation and optimization
             loss.backward()
             optimizer.step()
+            total_loss = total_loss + loss
 
-        # 打印每个周期的损失
-        print(f'Epoch {epoch + 1}, Loss: {loss.item():.4f}')
+        loss_result.append(total_loss)
+        print(f'Epoch {epoch + 1}, Loss: {total_loss:.4f}')
+        return loss_result
 # Predicting
 def cnn_predict(model, inputs):
     predicts = []
@@ -316,6 +367,7 @@ def evaluate_classifer(y_test, y_predictions, if_print_detailed_report, algorith
         print(classification_report(y_test, y_predictions))
     return accuracy, rf_precision, rf_recall, rf_f1
 
+
 if __name__ == '__main__':
     scaler = MinMaxScaler(feature_range=(0, 1))
     dataframe_loaded = load_data_from_files()
@@ -343,7 +395,7 @@ if __name__ == '__main__':
     y_test = torch.tensor(y_test_data.to_numpy(), dtype=torch.long)
 
     #-----------CNN-------------------
-    cnn_model = CNN()
+    cnn_model = CNN(3)
     cnn_optimizer = optim.SGD(cnn_model.parameters(), lr=0.01)
     cnn_criterion = nn.CrossEntropyLoss()
     train_cnn_model(cnn_model, X_train, y_train, cnn_criterion, cnn_optimizer)
@@ -351,20 +403,20 @@ if __name__ == '__main__':
     evaluate_classifer(y_test, cnn_predicts, True, "CNN")
     #---------------------------------------------------------------------------
     
-    output_size = 3
-    hidden_size = 64
-    input_size = 54
-    learning_rate = 0.01
-    gru_model = GRUClassifier(input_size, hidden_size, output_size)
-    gru_optimizer = torch.optim.Adam(gru_model.parameters(), lr=learning_rate)
-    criterion = nn.CrossEntropyLoss()
-    print("---------------------------")
-    print(X_train.shape)
-    train_model(gru_model, X_train, y_train, criterion, gru_optimizer)
-
-    # Test the GRU Model
-    #gru_model.eval()
-    gru_test_outputs = predict(gru_model,X_test.unsqueeze(1))
-    #gru_test_outputs = gru_test_outputs.detach().numpy()
-    print(gru_test_outputs)
-    evaluate_classifer(y_test, gru_test_outputs, True, "GRU")
+    # output_size = 3
+    # hidden_size = 64
+    # input_size = 54
+    # learning_rate = 0.01
+    # gru_model = GRUClassifier(input_size, hidden_size, output_size)
+    # gru_optimizer = torch.optim.Adam(gru_model.parameters(), lr=learning_rate)
+    # criterion = nn.CrossEntropyLoss()
+    # print("---------------------------")
+    # print(X_train.shape)
+    # train_model(gru_model, X_train, y_train, criterion, gru_optimizer)
+    #
+    # # Test the GRU Model
+    # #gru_model.eval()
+    # gru_test_outputs = predict(gru_model,X_test.unsqueeze(1))
+    # #gru_test_outputs = gru_test_outputs.detach().numpy()
+    # print(gru_test_outputs)
+    # evaluate_classifer(y_test, gru_test_outputs, True, "GRU")
