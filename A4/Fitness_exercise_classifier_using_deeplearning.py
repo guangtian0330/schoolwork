@@ -181,9 +181,9 @@ sequential sensor data classification.
 
 """
 
-class CNN(nn.Module):
+class CNNClassifier(nn.Module):
     def __init__(self, conv_num=2, kernel_size=3):
-        super(CNN, self).__init__()
+        super(CNNClassifier, self).__init__()
         self.conv_num = conv_num
         if conv_num == 2:
             self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=kernel_size, padding=1)
@@ -279,11 +279,11 @@ def train_cnn_model(model, input_seq, target_seq, criterion, optimizer, epochs=5
             # Backpropagation and optimization
             loss.backward()
             optimizer.step()
-            total_loss = total_loss + loss
+            total_loss = total_loss + loss.item()
 
         loss_result.append(total_loss)
         print(f'Epoch {epoch + 1}, Loss: {total_loss:.4f}')
-        return loss_result
+    return loss_result
 # Predicting
 def cnn_predict(model, inputs):
     predicts = []
@@ -395,28 +395,69 @@ if __name__ == '__main__':
     y_test = torch.tensor(y_test_data.to_numpy(), dtype=torch.long)
 
     #-----------CNN-------------------
-    cnn_model = CNN(3)
+    cnn_model = CNNClassifier(2)
     cnn_optimizer = optim.SGD(cnn_model.parameters(), lr=0.01)
     cnn_criterion = nn.CrossEntropyLoss()
-    train_cnn_model(cnn_model, X_train, y_train, cnn_criterion, cnn_optimizer)
+    loss_result = train_cnn_model(cnn_model, X_train, y_train, cnn_criterion, cnn_optimizer)
     cnn_predicts = cnn_predict(cnn_model,X_test.unsqueeze(1))
     evaluate_classifer(y_test, cnn_predicts, True, "CNN")
+
+    plt.figure(figsize=(12, 6))
+    plt.plot(range(0, 100, 1), loss_result, label="CNN Predicted Loss func")
+    plt.legend()
+    plt.title(f"CNN Loss with 'conv': {2} 'kernel size': {3}")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss Function Values")
+    plt.grid(True)
+    plt.show()
+
+    cnn_model = CNNClassifier(3)
+    cnn_optimizer = optim.SGD(cnn_model.parameters(), lr=0.01)
+    cnn_criterion = nn.CrossEntropyLoss()
+    loss_result = train_cnn_model(cnn_model, X_train, y_train, cnn_criterion, cnn_optimizer)
+    cnn_predicts = cnn_predict(cnn_model, X_test.unsqueeze(1))
+    evaluate_classifer(y_test, cnn_predicts, True, "CNN")
+
+    plt.figure(figsize=(12, 6))
+    plt.plot(range(0, 100, 1), loss_result, label="CNN Predicted Loss func")
+    plt.legend()
+    plt.title(f"CNN Loss with 'conv': {3} 'kernel size': {3}")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss Function Values")
+    plt.grid(True)
+    plt.show()
+
+    cnn_model = CNNClassifier(4)
+    cnn_optimizer = optim.SGD(cnn_model.parameters(), lr=0.01)
+    cnn_criterion = nn.CrossEntropyLoss()
+    loss_result = train_cnn_model(cnn_model, X_train, y_train, cnn_criterion, cnn_optimizer)
+    cnn_predicts = cnn_predict(cnn_model, X_test.unsqueeze(1))
+    evaluate_classifer(y_test, cnn_predicts, True, "CNN")
+
+    plt.figure(figsize=(12, 6))
+    plt.plot(range(0, 100, 1), loss_result, label="CNN Predicted Loss func")
+    plt.legend()
+    plt.title(f"CNN Loss with 'conv': {3} 'kernel size': {3}")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss Function Values")
+    plt.grid(True)
+    plt.show()
     #---------------------------------------------------------------------------
     
-    # output_size = 3
-    # hidden_size = 64
-    # input_size = 54
-    # learning_rate = 0.01
-    # gru_model = GRUClassifier(input_size, hidden_size, output_size)
-    # gru_optimizer = torch.optim.Adam(gru_model.parameters(), lr=learning_rate)
-    # criterion = nn.CrossEntropyLoss()
-    # print("---------------------------")
-    # print(X_train.shape)
-    # train_model(gru_model, X_train, y_train, criterion, gru_optimizer)
-    #
-    # # Test the GRU Model
-    # #gru_model.eval()
-    # gru_test_outputs = predict(gru_model,X_test.unsqueeze(1))
-    # #gru_test_outputs = gru_test_outputs.detach().numpy()
-    # print(gru_test_outputs)
-    # evaluate_classifer(y_test, gru_test_outputs, True, "GRU")
+    output_size = 3
+    hidden_size = 64
+    input_size = 54
+    learning_rate = 0.01
+    gru_model = GRUClassifier(input_size, hidden_size, output_size)
+    gru_optimizer = torch.optim.Adam(gru_model.parameters(), lr=learning_rate)
+    criterion = nn.CrossEntropyLoss()
+    print("---------------------------")
+    print(X_train.shape)
+    train_model(gru_model, X_train, y_train, criterion, gru_optimizer)
+
+    # Test the GRU Model
+    #gru_model.eval()
+    gru_test_outputs = predict(gru_model,X_test.unsqueeze(1))
+    #gru_test_outputs = gru_test_outputs.detach().numpy()
+    print(gru_test_outputs)
+    evaluate_classifer(y_test, gru_test_outputs, True, "GRU")
