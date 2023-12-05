@@ -182,66 +182,121 @@ def feature_scaling(feature_df) :
 Develop and train 1D CNN (Convolutional Neural Network) models appropriate for
 sequential sensor data classification.
 
-TBD by Sisong
 """
 
-class CNN(nn.Module):
-    def __init__(self):
-        super(CNN, self).__init__()
-        # Define the architecture of the neural network
-        # Convolutional Layer 1: Input channels=3 (RGB), Output channels=32, Kernel size=3x3, Padding=1
-        # The neural network learns these weights through backpropagation during training
-        self.conv1 = nn.Conv1d(54, 32, 3, padding=1)
-        # Convolutional Layer 2: Input channels=32, Output channels=64, Kernel size=3x3, Padding=1
-        self.conv2 = nn.Conv1d(32, 64, 3, padding=1)
-        # Max Pooling Layer: Kernel size=2x2, Stride=2 (pooling window moves horizontally and vertically after each operation)
-        self.pool = nn.MaxPool2d(2, 2) # now the image is 8x8
-        # Fully Connected Layer 1: Input features=64*8*8 (output channels * output image size), Output features=128
-        self.fc1 = nn.Linear(64 * 8 * 8, 128)
-        # Fully Connected Layer 2 (Output Layer): Input features=128, Output features=10 (number of classes)
-        self.fc2 = nn.Linear(128, 10)
+class CNNClassifier(nn.Module):
+    def __init__(self, conv_num=2, kernel_size=3):
+        super(CNNClassifier, self).__init__()
+        self.conv_num = conv_num
+        if conv_num == 2:
+            self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=kernel_size, padding=1)
+            self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=kernel_size, padding=1)
+            # pooling layer
+            self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
+            self.fc1 = nn.Linear(in_features=416, out_features=10)
+            self.fc2 = nn.Linear(in_features=10, out_features=3)
+        elif conv_num == 3:
+            self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=kernel_size, padding=1)
+            self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=kernel_size, padding=1)
+            self.conv3 = nn.Conv1d(in_channels=32, out_channels=32, kernel_size=kernel_size, padding=1)
+            # pooling layer
+            self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
+            self.fc1 = nn.Linear(in_features=192, out_features=10)
+            self.fc2 = nn.Linear(in_features=10, out_features=3)
+        elif conv_num == 4:
+            self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=kernel_size, padding=1)
+            self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=kernel_size, padding=1)
+            self.conv3 = nn.Conv1d(in_channels=32, out_channels=32, kernel_size=kernel_size, padding=1)
+            self.conv4 = nn.Conv1d(in_channels=32, out_channels=32, kernel_size=kernel_size, padding=1)
+            # pooling layer
+            self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
+            self.fc1 = nn.Linear(in_features=96, out_features=10)
+            self.fc2 = nn.Linear(in_features=10, out_features=3)
 
     def forward(self, x):
-        # Forward pass through the network
-        # Convolutional Layer 1 followed by ReLU activation and max pooling
-        x= self.conv1(x)
-        x = self.pool(torch.relu(x))
-        # Convolutional Layer 2 followed by ReLU activation and max pooling
-        x = self.pool(torch.relu(self.conv2(x)))
-        # Reshape the tensor for the fully connected layers
-        x = x.view(-1, 64 * 8 * 8)
-        # Fully Connected Layer 1 followed by ReLU activation
-        x = torch.relu(self.fc1(x))
-        # Fully Connected Layer 2 (Output Layer)
-        x = self.fc2(x)
-
+        if self.conv_num == 2:
+            # Apply convolution layer and ReLU activation function
+            x = torch.relu(self.conv1(x))
+            # pooling layer
+            x = self.pool(x)
+            x = torch.relu(self.conv2(x))
+            x = self.pool(x)
+            # Flattening features to input into the fully connected layer
+            x = x.view(x.size(0), -1)
+            x = torch.relu(self.fc1(x))
+            # Application output layer
+            x = self.fc2(x)
+        elif self.conv_num == 3:
+            # Apply convolution layer and ReLU activation function
+            x = torch.relu(self.conv1(x))
+            # pooling layer
+            x = self.pool(x)
+            x = torch.relu(self.conv2(x))
+            x = self.pool(x)
+            x = torch.relu(self.conv3(x))
+            x = self.pool(x)
+            # Flattening features to input into the fully connected layer
+            x = x.view(x.size(0), -1)
+            x = torch.relu(self.fc1(x))
+            # Application output layer
+            x = self.fc2(x)
+        elif self.conv_num == 4:
+            # Apply convolution layer and ReLU activation function
+            x = torch.relu(self.conv1(x))
+            # pooling layer
+            x = self.pool(x)
+            x = torch.relu(self.conv2(x))
+            x = self.pool(x)
+            x = torch.relu(self.conv3(x))
+            x = self.pool(x)
+            x = torch.relu(self.conv4(x))
+            x = self.pool(x)
+            # Flattening features to input into the fully connected layer
+            x = x.view(x.size(0), -1)
+            x = torch.relu(self.fc1(x))
+            # Application output layer
+            x = self.fc2(x)
         return x
 
 def train_cnn_model(model, input_seq, target_seq, criterion, optimizer, epochs=500) :
-  # input_seq = input_seq.unsqueeze(1)
-  input_seq = torch.transpose(input_seq, 0, 1)
+    input_seq = input_seq.unsqueeze(1)
+    model.train()
+    loss_result = []
+    batch_size = 10
+    for epoch in range(100):
+        total_loss = 0.0
+        for i in range(0, len(X_train), batch_size):
+            # Get batch data
+            inputs = input_seq[i:i + batch_size]
+            labels = target_seq[i:i + batch_size]
 
-  print(f"input_seq shape = {input_seq.shape}")
-  for epoch in range(epochs):
-      # Reset the gradient to zero in case of accumulation.
-      optimizer.zero_grad()
-      # Forward propogation
-      output = model(input_seq)
-      # Calculate the loss using criterion.
-      loss = criterion(output, target_seq)
-      # Calculate the backpropogation
-      loss.backward()
-      # Update the weightes based on the gradients.
-      optimizer.step()
-      # Print the debugging information for loss function
-      if epoch % 20 == 0:
-          print(f'Epoch [{epoch+1}/{epochs}], Loss: {loss.item():.4f}')
+            # Clear the old gradient
+            optimizer.zero_grad()
+
+            # Forward propagation
+            outputs = model(inputs)
+
+            # Calculate the loss
+            loss = criterion(outputs, labels)
+
+            # Backpropagation and optimization
+            loss.backward()
+            optimizer.step()
+            total_loss = total_loss + loss.item()
+
+        loss_result.append(total_loss)
+        print(f'Epoch {epoch + 1}, Loss: {total_loss:.4f}')
+    return loss_result
 # Predicting
 def cnn_predict(model, inputs):
+    predicts = []
+    inputs = inputs.unsqueeze(1)
     with torch.no_grad():
-        outputs = model(inputs)
-        _, predicted_labels = torch.max(outputs, 1)
-    return predicted_labels
+        for i in range(0, len(inputs)):
+            outputs = model(inputs[i])
+            _, predicted_label = torch.max(outputs, 1)
+            predicts.append(predicted_label.item())
+    return torch.tensor(predicts, dtype=torch.long)
 
 
 """
@@ -371,6 +426,7 @@ def evaluate_with_parameters(param_grid) :
     return dropout_rate, hidden_size, num_layers
 
 
+
 if __name__ == '__main__':
     scaler = MinMaxScaler(feature_range=(0, 1))
     dataframe_loaded = load_data_from_files()
@@ -398,25 +454,53 @@ if __name__ == '__main__':
     y_test = torch.tensor(y_test_data.to_numpy(), dtype=torch.long)
 
     #-----------CNN-------------------
+    cnn_model = CNNClassifier(2)
+    cnn_optimizer = optim.SGD(cnn_model.parameters(), lr=0.01)
+    cnn_criterion = nn.CrossEntropyLoss()
+    loss_result = train_cnn_model(cnn_model, X_train, y_train, cnn_criterion, cnn_optimizer)
+    cnn_predicts = cnn_predict(cnn_model,X_test.unsqueeze(1))
+    evaluate_classifer(y_test, cnn_predicts, True, "CNN")
 
-    net = CNN()
+    plt.figure(figsize=(12, 6))
+    plt.plot(range(0, 100, 1), loss_result, label="CNN Predicted Loss func")
+    plt.legend()
+    plt.title(f"CNN Loss with 'conv': {2} 'kernel size': {3}")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss Function Values")
+    plt.grid(True)
+    plt.show()
 
-    # Define the loss function (Cross Entropy Loss for classification problems)
-    criterion = nn.CrossEntropyLoss()
-    # Define the optimizer (Stochastic Gradient Descent with momentum)
-    optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
+    cnn_model = CNNClassifier(3)
+    cnn_optimizer = optim.SGD(cnn_model.parameters(), lr=0.01)
+    cnn_criterion = nn.CrossEntropyLoss()
+    loss_result = train_cnn_model(cnn_model, X_train, y_train, cnn_criterion, cnn_optimizer)
+    cnn_predicts = cnn_predict(cnn_model, X_test.unsqueeze(1))
+    evaluate_classifer(y_test, cnn_predicts, True, "CNN")
 
-    # Load and preprocess the CIFAR-10 dataset
-    # a normalized PyTorch tensor that can be passed as input
-    # torchvision.transforms.Normalize(mean, std, inplace=False)
-    # Suppose you have a pixel value of (100, 150, 200) for a particular pixel in an image.
-    # After applying this normalization, the pixel values would be transformed as follows:
-    # Red channel: (100 - 0.5) / 0.5 = 199
-    # Green channel: (150 - 0.5) / 0.5 = 299
-    # Blue channel: (200 - 0.5) / 0.5 = 399
-    # train_cnn_model(net, X_train, y_train, criterion, optimizer)
+    plt.figure(figsize=(12, 6))
+    plt.plot(range(0, 100, 1), loss_result, label="CNN Predicted Loss func")
+    plt.legend()
+    plt.title(f"CNN Loss with 'conv': {3} 'kernel size': {3}")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss Function Values")
+    plt.grid(True)
+    plt.show()
 
+    cnn_model = CNNClassifier(4)
+    cnn_optimizer = optim.SGD(cnn_model.parameters(), lr=0.01)
+    cnn_criterion = nn.CrossEntropyLoss()
+    loss_result = train_cnn_model(cnn_model, X_train, y_train, cnn_criterion, cnn_optimizer)
+    cnn_predicts = cnn_predict(cnn_model, X_test.unsqueeze(1))
+    evaluate_classifer(y_test, cnn_predicts, True, "CNN")
 
+    plt.figure(figsize=(12, 6))
+    plt.plot(range(0, 100, 1), loss_result, label="CNN Predicted Loss func")
+    plt.legend()
+    plt.title(f"CNN Loss with 'conv': {3} 'kernel size': {3}")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss Function Values")
+    plt.grid(True)
+    plt.show()
     #---------------------------------------------------------------------------
     
     output_size = 3
@@ -432,15 +516,18 @@ if __name__ == '__main__':
     }
     # Tune ther parameters and evaluate the model.
     evaluate_with_parameters(param_grid)
+
     
-    
-    # Define the hyperparameter space with no dropout layer
-    param_grid_no_dropout = {
-        'module__dropout_rate': [0],
-        # With a dropour rate, there are at least 2 layers.
-        'module__num_layers': [1, 2, 3],
-        'module__hidden_size': [50, 100],
-    }
-    # Tune ther parameters and evaluate the model.
-    evaluate_with_parameters(param_grid_no_dropout)
-    
+    gru_model = GRUClassifier(input_size, hidden_size, output_size)
+    gru_optimizer = torch.optim.Adam(gru_model.parameters(), lr=learning_rate)
+    criterion = nn.CrossEntropyLoss()
+    print("---------------------------")
+    print(X_train.shape)
+    train_model(gru_model, X_train, y_train, criterion, gru_optimizer)
+
+    # Test the GRU Model
+    #gru_model.eval()
+    gru_test_outputs = predict(gru_model,X_test.unsqueeze(1))
+    #gru_test_outputs = gru_test_outputs.detach().numpy()
+    print(gru_test_outputs)
+    evaluate_classifer(y_test, gru_test_outputs, True, "GRU")
