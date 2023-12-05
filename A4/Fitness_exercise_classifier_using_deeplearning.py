@@ -22,6 +22,9 @@ import torchvision
 import torchvision.transforms as transforms
 import numpy as np
 import matplotlib.pyplot as plt
+from skorch import NeuralNetClassifier
+from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import TimeSeriesSplit
 
 # Define the name list of motions and sensors.
 # There are 3 motions and each motion has dataset from 3 sensors.
@@ -282,6 +285,35 @@ def train_model(model, input_seq, target_seq, criterion, optimizer, epochs=500) 
       # Print the debugging information for loss function
       if epoch % 20 == 0:
           print(f'Epoch [{epoch+1}/{epochs}], Loss: {loss.item():.4f}')
+
+
+def hyperparam_tuning(param_grid, X_train, y_train, scoring='accuracy'):
+
+  # Create a classifier model which can be accepted by sklearner.
+  gru_model = NeuralNetClassifier(
+      GRUClassifier,
+      # Use CrossEntropyLoss as the loss func
+      criterion=nn.CrossEntropyLoss,
+      optimizer=optim.Adam,
+      max_epochs=100,
+      batch_size=32,
+      # The last element is the input size.
+      module__input_size=X_train.shape[2],
+      module__output_size=3
+  )
+
+  # Cross validation for time series data with 5 folds.
+  tscv = TimeSeriesSplit(n_splits=5)
+
+  # Use GridSearchCV to search the optimal hyperparameter
+  grid = GridSearchCV(estimator=gru_model, param_grid=param_grid, cv=tscv, scoring=scoring, verbose=1)
+  grid_result = grid.fit(X_train, y_train)
+
+  # Print the beat parameter
+  print("Best Parameters: ", grid_result.best_params_)
+  return grid_result.best_params_
+
+
 # Predicting
 def predict(model, inputs):
     with torch.no_grad():
@@ -311,6 +343,33 @@ def evaluate_classifer(y_test, y_predictions, if_print_detailed_report, algorith
         print(f"{algorithm} Classifier Report:")
         print(classification_report(y_test, y_predictions))
     return accuracy, rf_precision, rf_recall, rf_f1
+
+def evaluate_with_parameters(param_grid) :
+    best_parameters = hyperparam_tuning(param_grid, X_train.unsqueeze(1), y_train, scoring='f1_weighted')
+    print("best_parameters = ",best_parameters)
+    dropout_rate = best_parameters['module__dropout_rate']
+    hidden_size = best_parameters['module__hidden_size']
+    num_layers = best_parameters['module__num_layers']
+    gru_model = GRUClassifier(input_size, hidden_size, output_size)
+    gru_optimizer = torch.optim.Adam(gru_model.parameters(), lr=learning_rate)
+    criterion = nn.CrossEntropyLoss()
+    loss_list = train_model(gru_model, X_train, y_train, criterion, gru_optimizer)
+
+    # Test the GRU Model
+    gru_test_outputs = predict(gru_model,X_test.unsqueeze(1))
+
+    evaluate_classifer(y_test, gru_test_outputs, True, "GRU")
+    print(loss_list)
+    plt.figure(figsize=(12, 6))
+    plt.plot(range(0, 1000, 1), loss_list, label="GRU Predicted Loss func")  # Add this line for GRU
+    plt.legend()
+    plt.title(f"GRU Loss with 'module__dropout_rate': {dropout_rate} 'module__hidden_size': {hidden_size}, 'module__num_layers': {num_layers}")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss Function Values")
+    plt.grid(True)
+    plt.show()
+    return dropout_rate, hidden_size, num_layers
+
 
 if __name__ == '__main__':
     scaler = MinMaxScaler(feature_range=(0, 1))
@@ -361,19 +420,27 @@ if __name__ == '__main__':
     #---------------------------------------------------------------------------
     
     output_size = 3
-    hidden_size = 64
     input_size = 54
     learning_rate = 0.01
-    gru_model = GRUClassifier(input_size, hidden_size, output_size)
-    gru_optimizer = torch.optim.Adam(gru_model.parameters(), lr=learning_rate)
-    criterion = nn.CrossEntropyLoss()
-    print("---------------------------")
-    print(X_train.shape)
-    train_model(gru_model, X_train, y_train, criterion, gru_optimizer)
     
-    # Test the GRU Model
-    #gru_model.eval()
-    gru_test_outputs = predict(gru_model,X_test.unsqueeze(1))
-    #gru_test_outputs = gru_test_outputs.detach().numpy()
-    print(gru_test_outputs)
-    evaluate_classifer(y_test, gru_test_outputs, True, "GRU")
+    # Define the hyperparameter space.
+    param_grid = {
+        'module__dropout_rate': [0.2, 0.5],
+        # With a dropour rate, there are at least 2 layers.
+        'module__num_layers': [2, 3],
+        'module__hidden_size': [50, 100],
+    }
+    # Tune ther parameters and evaluate the model.
+    evaluate_with_parameters(param_grid)
+    
+    
+    # Define the hyperparameter space with no dropout layer
+    param_grid_no_dropout = {
+        'module__dropout_rate': [0],
+        # With a dropour rate, there are at least 2 layers.
+        'module__num_layers': [1, 2, 3],
+        'module__hidden_size': [50, 100],
+    }
+    # Tune ther parameters and evaluate the model.
+    evaluate_with_parameters(param_grid_no_dropout)
+    
