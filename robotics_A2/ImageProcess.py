@@ -1,115 +1,19 @@
 import cv2
 import numpy as np
 
-MIN_POS_THRESHOLD = 5
-FORWARD_ARROW = 0
-LEFT_ARROW = 1
-RIGHT_ARROW = 2
+INVALID_ARROW = 0
+FORWARD_ARROW = 1
+LEFT_ARROW = 2
+RIGHT_ARROW = 3
 arrow_template_images = ['marker_forward.png', 'marker_left.png', 'marker_right.png']
 
-
-def get_hsv_mean(frame, poi_start, poi_end):
-    # Extract the ROI and calculate the average HSV values
-    roi = frame[poi_start[1]:poi_end[1], poi_start[0]:poi_end[0]]
-    mean_hsv_per_row = np.average(roi, axis=0)
-    mean_hsv = np.average(mean_hsv_per_row, axis=0)
-    return mean_hsv.astype(int)
-
-
-class BallTracker:
-    def __init__(self):
-        self.ball_selected = False
-
-        self.pos_start = (0, 0)
-        self.pos_end = (0, 0)
-        self.selected_diff = (0, 0)
-        self.hsv_lower = np.array([0, 0, 0])  # Default lower HSV value
-        self.hsv_higher = np.array([180, 255, 255])  # Default upper HSV value
-        self.current_frame = None
-        self.cap = None
-
-    def mouse_callback(self, event, x, y, flags, param):
-        if event == cv2.EVENT_LBUTTONDOWN:
-            self.pos_start = (x, y)
-            self.ball_selected = False
-
-        elif event == cv2.EVENT_LBUTTONUP:
-            self.pos_end = (x, y)
-            self.selected_diff = (abs(self.pos_start[0] - self.pos_end[0]),
-                                  abs(self.pos_start[1] - self.pos_end[1]))
-            if (self.selected_diff[0] < MIN_POS_THRESHOLD or
-                    self.selected_diff[1] < MIN_POS_THRESHOLD):
-                self.ball_selected = False
-            else:
-                self.ball_selected = True
-                # Obtain the lower and higher HSVs
-                if self.current_frame is not None:
-                    hsv_values = get_hsv_mean(
-                        cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2HSV),
-                        self.pos_start, self.pos_end)
-                    self.hsv_lower = np.maximum(hsv_values - 20, 0)
-                    self.hsv_higher = np.minimum(hsv_values + 20, [180, 255, 255])
-
-    def trackBall(self):
-        ret, frame = self.cap.read()
-        if not ret:
-            return
-
-        # Resize the frame
-        self.current_frame = cv2.resize(frame, (640, 480))
-
-        if self.ball_selected:
-            # 1. Color Extraction
-            # Convert to HSV and apply mask
-            color_hsv_frame = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2HSV)
-            mask = cv2.inRange(color_hsv_frame, self.hsv_lower, self.hsv_higher)
-            # Blurring and edge detection
-            blurred = cv2.GaussianBlur(mask, (5, 5), 0)
-
-            # Morphological opening, closing, erosion, and dilation
-            kernel = np.ones((5, 5), np.uint8)
-            closing = cv2.morphologyEx(blurred, cv2.MORPH_CLOSE, kernel)
-            contours, _ = cv2.findContours(closing.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            if contours:
-                max_contour = max(contours, key=cv2.contourArea)
-                x, y, w, h = cv2.boundingRect(max_contour)
-                points_left = (x - 5, y - 5)
-                points_right = (x + w + 5, y + h + 5)
-                # draw the rectangle
-                cv2.rectangle(self.current_frame, points_left, points_right, (0, 255, 0), 2)
-                center = ((points_left[0] + points_right[0]) >> 2, (points_left[1] + points_right[1]) >> 2)
-                area = cv2.contourArea(max_contour)
-                print(f"[BALL estimated] x: {center[0]} y: {center[1]} area: {area}")
-            # Display images
-            cv2.imshow('Original', self.current_frame)
-            cv2.imshow('closing', closing)
-        else:
-            cv2.imshow('Original', self.current_frame)
-
-    def run(self):
-        self.cap = cv2.VideoCapture(0)
-        if not self.cap.isOpened():
-            raise IOError("Cannot open webcam")
-
-        cv2.namedWindow('Original')
-        cv2.setMouseCallback('Original', self.mouse_callback)
-
-        while True:
-            self.trackBall()
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-        self.cap.release()
-        cv2.destroyAllWindows()
-
-
-def get_canny(frame):
-    # low_threshold = cv2.getTrackbarPos('Low Threshold', 'Canny Parameters')
-    # high_threshold = cv2.getTrackbarPos('High Threshold', 'Canny Parameters')
-    edges = cv2.Canny(frame, 50, 150)
-    return edges
-
+TRACKER_BALL = 0
+TRACKER_ARROW = 1
+tracker_type = TRACKER_BALL
 
 # Preprocess the arrow template pictures.
+
+
 def preprocess_arrow_template(image_path):
     gray_frame = cv2.resize(cv2.imread(image_path, cv2.IMREAD_GRAYSCALE), (640, 480))
     template_contours, _ = cv2.findContours(gray_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -119,62 +23,109 @@ def preprocess_arrow_template(image_path):
     return gray_frame, template_contour
 
 
-"""
-def trackArrows(frame, forward_descriptor, left_descriptor, right_descriptor):
-    resized_frame = cv2.resize(frame, (640, 480))
-    hsv_frame = cv2.cvtColor(resized_frame, cv2.COLOR_RGB2HSV)
-    # edges = get_canny(gray_frame)
-    
-    low_threshold_H = cv2.getTrackbarPos('low_threshold_H', 'Binary Parameters')
-    high_threshold_H = cv2.getTrackbarPos('high_threshold_H', 'Binary Parameters')
-    low_threshold_S = cv2.getTrackbarPos('low_threshold_S', 'Binary Parameters')
-    high_threshold_S = cv2.getTrackbarPos('high_threshold_S', 'Binary Parameters')
-    low_threshold_V = cv2.getTrackbarPos('low_threshold_V', 'Binary Parameters')
-    high_threshold_V = cv2.getTrackbarPos('high_threshold_V', 'Binary Parameters')
-    low_white = np.array([low_threshold_H, low_threshold_S, low_threshold_V])
-    high_white = np.array([high_threshold_H, high_threshold_S, high_threshold_V])
-    
-    low_white = np.array([95, 15, 210])
-    high_white = np.array([186, 51, 255])
-    white_mask = cv2.inRange(hsv_frame, low_white, high_white)
-    contours, _ = cv2.findContours(white_mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
-    contour_list = []
+gray_left, left_contour = preprocess_arrow_template('marker_left.png')
+gray_right, right_contour = preprocess_arrow_template('marker_right.png')
+gray_forward, forward_contour = preprocess_arrow_template('marker_forward.png')
+result_type = []
+invalid_score = 0
+
+
+def preprocess_cam_hsv(frame):
+    hsv_lower = np.array([0, 122, 118])  # Default lower HSV value
+    hsv_higher = np.array([48, 219, 219])  # Default upper HSV value
+    # Resize the frame
+    current_frame = cv2.resize(frame, (640, 480))
+    # 1. Color Extraction
+    # Convert to HSV and apply mask
+    color_hsv_frame = cv2.cvtColor(current_frame, cv2.COLOR_BGR2HSV)
+    # Blurring and edge detection
+    blurred = cv2.GaussianBlur(color_hsv_frame, (5, 5), 0)
+    mask = cv2.inRange(blurred, hsv_lower, hsv_higher)
+    cv2.imshow("blurred", blurred)
+    return current_frame, mask
+
+
+def trackBall_ApproxPolyDP(frame):
+    current_frame = cv2.resize(frame, (640, 480))
+    gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blurred, 50, 150)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    circles = []
+    for contour in contours:
+        epsilon = 0.02 * cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, epsilon, True)
+        if 6 < len(approx) < 11:
+            area = cv2.contourArea(contour)
+            perimeter = cv2.arcLength(contour, True)
+            if perimeter == 0:
+                continue
+            circularity = 4 * np.pi * area / (perimeter * perimeter)
+            if area > 100 and circularity > 0.4:
+                circles.append(contour)
+                cv2.drawContours(current_frame, [approx], -1, (0, 255, 0), 2)
+    return circles, current_frame, edges
+
+
+def trackBall_Color_extraction(frame):
+    current_frame, mask = preprocess_cam_hsv(frame)
+    # Morphological opening, closing
+    kernel = np.ones((5, 5), np.uint8)
+    opening = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    closing = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    contours, _ = cv2.findContours(closing.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    circles = []
     for contour in contours:
         area = cv2.contourArea(contour)
-        if area < 80:
+        perimeter = cv2.arcLength(contour, True)
+        if perimeter == 0:
             continue
-        epsilon = 0.05 * cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, epsilon, True)
-        if 6 <= len(approx) <= 9:
-            contour_list.append(contour)
-    if contour_list:
-        max_approx = max(contour_list, key=cv2.contourArea)
-        cv2.drawContours(resized_frame, [max_approx], 0, (0, 255, 0), 3)
-        print(f"contour area = {cv2.contourArea(max_approx)}")
-    #rect = cv2.minAreaRect(approx)
-    #box = cv2.boxPoints(rect)
-    #box = np.int0(box)
-    # arrow_type = None
-    # print(f"forward = {len()}, left = {len()}, right = {len()}")
-    cv2.imshow('original', resized_frame)
-    cv2.imshow('white_mask', white_mask)
-
-    return
-    """
+        circularity = 4 * np.pi * area / (perimeter * perimeter)
+        if area > 100 and circularity > 0.4:
+            circles.append(contour)
+    return circles, current_frame, closing
 
 
-def trackArrows(frame, forward_contour, left_contour, right_contour):
-    #match_threshold = cv2.getTrackbarPos('match_threshold', 'Match threshold')
-    #match_threshold = match_threshold / 10
-    match_threshold = 0.4
-    print(f"threshold = {match_threshold}")
+def analyze_result(circles, current_frame, method):
+    if circles:
+        max_contour = max(circles, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(max_contour)
+        points_left = (x - 5, y - 5)
+        points_right = (x + w + 5, y + h + 5)
+        # draw the rectangle
+        if method == "ApproxPolyDP":
+            cv2.rectangle(current_frame, points_left, points_right, (0, 255, 0), 2)
+        center = ((points_left[0] + points_right[0]) >> 2, (points_left[1] + points_right[1]) >> 2)
+        area = cv2.contourArea(max_contour)
+        print(f"[BALL {method}] x: {center[0]} y: {center[1]} area: {area}")
+
+
+def trackBall(frame):
+    circles, current_frame, edges = trackBall_ApproxPolyDP(frame)
+    analyze_result(circles, current_frame, "ColorExtract")
+    circles, current_frame, closing = trackBall_ApproxPolyDP(frame)
+    analyze_result(circles, current_frame, "ApproxPolyDP")
+    # Display images
+    cv2.imshow('Original', current_frame)
+    cv2.imshow('edges', edges)
+
+
+def get_canny(frame):
+    # low_threshold = cv2.getTrackbarPos('Low Threshold', 'Canny Parameters')
+    # high_threshold = cv2.getTrackbarPos('High Threshold', 'Canny Parameters')
+    edges = cv2.Canny(frame, 50, 150)
+    return edges
+
+
+def trackArrows(frame):
+    match_threshold = 0.4  # This threshold value is adjusted during debugging
     resized_frame = cv2.resize(frame, (640, 480))
     gray_frame = cv2.cvtColor(resized_frame, cv2.COLOR_RGB2GRAY)
     edges = get_canny(gray_frame)
     contours, _ = cv2.findContours(edges, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
     max_area = 0
     max_contour = None
-    arrow_type = None
+    arrow_type = INVALID_ARROW
     best_approx = 0
     for contour in contours:
         epsilon = 0.02 * cv2.arcLength(contour, True)
@@ -189,7 +140,6 @@ def trackArrows(frame, forward_contour, left_contour, right_contour):
             min_match = min(forward_match, left_match, right_match)
             if min_match > match_threshold:
                 continue
-            # print(f"min_match = {min_match}")
             if max_area > area:
                 continue
             else:
@@ -197,47 +147,73 @@ def trackArrows(frame, forward_contour, left_contour, right_contour):
                 max_area = area
                 best_approx = approx
             if len(approx) == 7:
-                arrow_type = 'forward'
-            else:
-                arrow_type = 'turns'
+                arrow_type = FORWARD_ARROW
 
     if max_contour is not None:
         angle = 90
         rect = cv2.minAreaRect(best_approx)
         box = cv2.boxPoints(rect)
         box = np.int0(box)
-        if arrow_type == 'turns':
+        if arrow_type != FORWARD_ARROW:
             _, _, angle = rect
             if angle > 60:
-                arrow_type = 'Right'
+                arrow_type = RIGHT_ARROW
             elif angle < 30:
-                arrow_type = 'Left'
+                arrow_type = LEFT_ARROW
             else:
-                arrow_type = 'None'
-        if arrow_type == 'Left' or arrow_type == 'Right' or arrow_type == 'forward':
+                arrow_type = INVALID_ARROW
+        if arrow_type != INVALID_ARROW:
             cv2.drawContours(gray_frame, [box], 0, (0, 0, 255), 3)
             print(f"angle = {angle}, max_area = {max_area}")
             print(f"suspecting arrow type is : {arrow_type}, number of edges = {len(best_approx)}")
             cv2.drawContours(gray_frame, [max_contour], -1, (0, 255, 0), 3)
-    cv2.imshow('Frame', gray_frame)
-    return
+    return gray_frame, edges, arrow_type
 
 
+def analyze_arrow_tracking_res(arrow_type):
+    image = None
+    global invalid_score
+    if arrow_type == INVALID_ARROW:
+        invalid_score += 1
+    else:
+        result_type.append(arrow_type)
+    if invalid_score == 30:
+        invalid_score = 0
+        result_type.clear()
+        cv2.destroyWindow("result")
+    if len(result_type) == 10:
+        mean_val = np.mean(result_type)
+        print(f"mean value {mean_val} of arrow_type = {arrow_type}")
+        invalid_score = 0
+        result_type.clear()
+        if 0 < mean_val <= 1.4:
+            image = gray_forward
+        elif 1.4 <= mean_val <= 2.4:
+            image = gray_left
+        elif mean_val >= 2.4:
+            image = gray_right
+    if image is not None:
+        cv2.imshow("result", image)
+
+def update_tracker_type(tracker):
+    global tracker_type
+    cv2.destroyAllWindows()
+    tracker_type = tracker
 def openCam():
-    gray_left, left_contour = preprocess_arrow_template('marker_left.png')
-    gray_right, right_contour = preprocess_arrow_template('marker_right.png')
-    gray_forward, forward_contour = preprocess_arrow_template('marker_forward.png')
-    print(f"length of forward:{len(forward_contour)}, left:{len(left_contour)}, right:{len(right_contour)}")
-    epsilon = 0.05 * cv2.arcLength(forward_contour, True)
-    approx = cv2.approxPolyDP(forward_contour, epsilon, True)
     cap = cv2.VideoCapture(0)
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        trackArrows(frame, forward_contour, left_contour, right_contour)
-        #cv2.drawContours(gray_forward, [approx], 0, (0, 0, 255), 3)
-        #cv2.imshow('forward', gray_forward)
+        # low_threshold = cv2.getTrackbarPos('Low Threshold', 'Canny Parameters')
+        if not tracker_type:
+            trackBall(frame)
+        else:
+            gray_result, edges, arrow_type = trackArrows(frame)
+            top_row = cv2.hconcat(([gray_result, edges]))
+            cv2.imshow("debug", top_row)
+            analyze_arrow_tracking_res(arrow_type)
+
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
     cap.release()
@@ -245,17 +221,8 @@ def openCam():
 
 
 def main():
-    # Run the webcam pipeline
-    # ball_tracker = BallTracker()
-    # ball_tracker.run()
-
-    # cv2.namedWindow('Canny Parameters')
-    # cv2.createTrackbar('Low Threshold', 'Canny Parameters', 0, 255, get_canny)
-    # cv2.createTrackbar('High Threshold', 'Canny Parameters', 0, 255, get_canny)
-
-    # cv2.namedWindow('Match threshold')
-    # cv2.createTrackbar('match_threshold', 'Match threshold', 0, 10, trackArrows)
-
+    cv2.namedWindow('Ball Tracker 0 or Arrow Tracker 1')
+    cv2.createTrackbar('Tracker', 'Ball Tracker 0 or Arrow Tracker 1', 0, 1, openCam)
     openCam()
 
 
